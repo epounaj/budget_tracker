@@ -27,9 +27,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .logo{width:30px;height:30px;border-radius:8px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .logo svg{width:17px;height:17px;stroke:#fff;fill:none;stroke-width:1.8;}
 h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
+.header-actions{display:flex;align-items:center;gap:8px;}
+.user-chip{display:none;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:4px 10px 4px 4px;max-width:170px;}
+.user-chip.show{display:flex;}
+.user-chip img{width:22px;height:22px;border-radius:6px;object-fit:cover;}
+.user-chip span{font-size:12px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .settings-btn{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px;cursor:pointer;color:var(--ink-2);display:flex;}
 .settings-btn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;}
 .settings-btn:hover{color:var(--ink);}
+.login-screen{display:none;position:fixed;inset:0;z-index:90;background:var(--bg);align-items:center;justify-content:center;padding:calc(28px + var(--safe-top)) 16px calc(28px + var(--safe-bottom));}
+.login-screen.show{display:flex;}
+.login-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:28px 24px;max-width:420px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.06);}
+.login-brand{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.login-card h2{font-size:22px;font-weight:600;margin:0 0 8px;letter-spacing:-.03em;}
+.login-card .lead{color:var(--ink-2);font-size:14px;margin:0 0 20px;}
+.google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;font-family:inherit;font-weight:550;font-size:15px;background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:10px;padding:12px 16px;cursor:pointer;}
+.google-btn:hover{background:var(--surface-2);}
+.google-btn:disabled{opacity:.55;cursor:default;}
+.google-btn svg{width:18px;height:18px;}
+#app[hidden]{display:none;}
 .sync-pill{font-size:11px;color:var(--ink-3);margin:0 0 14px;display:flex;align-items:center;gap:6px;}
 .sync-dot{width:6px;height:6px;border-radius:50%;background:var(--ink-3);}
 .sync-dot.on{background:var(--accent);}
@@ -129,13 +145,17 @@ h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
 </style>
 </head>
 <body>
-<div class="container">
+<div class="login-screen show" id="login-screen"><div class="login-card" id="login-card"></div></div>
+<div class="container" id="app" hidden>
   <div class="header">
     <div class="brand">
       <div class="logo"><svg viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-6h6v6"/></svg></div>
       <h1>Site Ledger</h1>
     </div>
-    <button class="settings-btn" id="open-settings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <div class="header-actions">
+      <div class="user-chip" id="user-chip"><img id="user-pic" alt=""><span id="user-name"></span></div>
+      <button class="settings-btn" id="open-settings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    </div>
   </div>
   <p class="sync-pill" id="sync-pill"><span class="sync-dot" id="sync-dot"></span><span id="sync-text">Local only</span></p>
 
@@ -177,6 +197,10 @@ h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
 <script>
 /* ============ Site Ledger — local-first PWA ============ */
 const CUR='Rs ';
+/* Public OAuth Web client ID — not a secret. Leave empty to paste it on first login. */
+const GOOGLE_CLIENT_ID='';
+const PROFILE_FILE='site-ledger-settings.json';
+const CSV_FILE='site-ledger.csv';
 const money=n=>CUR+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
 const todayStr=()=>new Date().toISOString().slice(0,10);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -200,7 +224,7 @@ function idbGetMeta(k){return new Promise((res)=>{const r=tx('meta','readonly').
 function idbSetMeta(k,v){return idbPut('meta',{k,v});}
 
 let state={funds:[],budget:[],actions:[],sellers:[],purchases:[]};
-let settings={provider:'openai',apiKey:'',model:'',driveClientId:'',driveToken:null,driveFolderId:''};
+let settings={provider:'openai',apiKey:'',model:'',driveClientId:'',driveToken:null,driveFolderId:'',user:null,userSub:'',autoCsv:true};
 let activeTab='funds',editing=null,editKind=null,pendingPhoto=null,pendingFullPhoto=null;
 
 async function loadAll(){for(const s of ['funds','budget','actions','sellers','purchases'])state[s]=await idbAll(s);
@@ -444,7 +468,7 @@ async function saveModal(){
   }
   if(editing)Object.assign(editing,obj);else{obj.id=uid();state[k].push(obj);}
   await persist(k);closeModal();render();
-  if(settings.autoCsv&&settings.driveToken)scheduleCsvSync();
+  if(settings.driveToken)scheduleCsvSync();
 }
 
 function compressImage(file,maxDim,quality){maxDim=maxDim||1000;quality=quality||0.6;
@@ -506,23 +530,75 @@ async function importCSVFile(file){const text=await file.text();const fresh=from
   if(!confirm('Import will REPLACE all current data with the CSV contents. Continue?'))return;
   state=fresh;for(const s of ['funds','budget','actions','sellers','purchases'])await persist(s);render();toast('CSV imported');}
 
-/* ---- Google Drive (optional, needs secure context + OAuth client id) ---- */
-const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
-let gTokenClient=null;
+/* ---- Google login + Drive profile ---- */
+const LOGIN_SCOPE='openid email profile https://www.googleapis.com/auth/drive.file';
+const G_ICON='<svg viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84A4.14 4.14 0 0 1 12 13.4v2.26h2.72c1.6-1.47 2.52-3.64 2.52-6.46z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.72-2.26c-.76.5-1.72.8-3.24.8-2.49 0-4.6-1.68-5.36-3.94H.96v2.32A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.64 10.42A5.4 5.4 0 0 1 3.36 9c0-.49.08-.97.28-1.42V5.26H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.04l2.68-2.62z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 5.26L3.64 7.58C4.4 5.32 6.51 3.58 9 3.58z"/></svg>';
+let gTokenClient=null,loggedIn=false;
 function secureContext(){return window.isSecureContext===true;}
+function clientId(){return (GOOGLE_CLIENT_ID||settings.driveClientId||'').trim();}
 function loadGis(){return new Promise((res,rej)=>{if(window.google&&google.accounts&&google.accounts.oauth2)return res();
   const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=res;s.onerror=()=>rej(new Error('Could not load Google script'));document.head.appendChild(s);});}
-async function driveConnect(){
-  if(!secureContext())return toast('Drive needs https or localhost — see Settings notes');
-  if(!settings.driveClientId)return toast('Add your Google OAuth Client ID in Settings');
-  await loadGis();
-  gTokenClient=google.accounts.oauth2.initTokenClient({client_id:settings.driveClientId,scope:DRIVE_SCOPE,
-    callback:async resp=>{if(resp&&resp.access_token){settings.driveToken=resp.access_token;await saveSettings();await ensureDriveFolder();toast('Google Drive connected');updateSyncPill();renderSettings();}}});
-  gTokenClient.requestAccessToken({prompt:'consent'});
+function showLogin(opts){opts=opts||{};$('login-screen').classList.add('show');$('app').hidden=true;loggedIn=false;renderLogin(opts);}
+function hideLogin(){$('login-screen').classList.remove('show');$('app').hidden=false;loggedIn=true;}
+function renderLogin(opts){
+  opts=opts||{};const insecure=!secureContext();const cid=clientId();
+  $('login-card').innerHTML=
+    '<div class="login-brand"><div class="logo"><svg viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-6h6v6"/></svg></div><h1>Site Ledger</h1></div>'+
+    '<h2>Sign in to continue</h2>'+
+    '<p class="lead">Use your Google account. API keys are saved in your Drive profile, not in this website.</p>'+
+    (insecure?'<div class="set-note">Google login needs https or localhost. Host this file (GitHub Pages) or serve it locally — see SETUP.md.</div>':
+      ((cid?'':'<div class="field" style="margin-bottom:12px"><label>Google OAuth Client ID</label><input id="login-client-id" placeholder="….apps.googleusercontent.com"></div>')+
+       '<button class="google-btn" id="google-login"'+(opts.busy?' disabled':'')+'>'+G_ICON+(opts.busy?'Signing in…':'Continue with Google')+'</button>'+
+       '<div class="set-note">First time: create a Web OAuth client in Google Cloud, add this site as an authorised origin, then paste the Client ID above if asked.</div>'))+
+    '<p class="error-text" id="login-error"></p>';
+  const btn=$('google-login');if(btn)btn.onclick=()=>startGoogleLogin(false);
 }
-async function driveDisconnect(){settings.driveToken=null;await saveSettings();updateSyncPill();renderSettings();toast('Drive disconnected');}
+function loginErr(msg){const e=$('login-error');if(!e)return;e.textContent=msg;e.classList.add('show');}
+async function startGoogleLogin(silent){
+  if(!secureContext())return loginErr('Needs https or localhost.');
+  const inp=$('login-client-id');if(inp&&inp.value.trim())settings.driveClientId=inp.value.trim();
+  const cid=clientId();if(!cid)return loginErr('Paste your Google OAuth Client ID first.');
+  settings.driveClientId=cid;await saveSettings();
+  try{await loadGis();}catch(e){return loginErr(e.message||'Could not load Google.');}
+  if(!silent){const b=$('google-login');if(b){b.disabled=true;b.innerHTML=G_ICON+'Signing in…';}}
+  return new Promise(resolve=>{
+    gTokenClient=google.accounts.oauth2.initTokenClient({client_id:cid,scope:LOGIN_SCOPE,
+      callback:async resp=>{
+        if(!resp||!resp.access_token){if(!silent){renderLogin();loginErr(resp&&resp.error_description||'Sign-in cancelled.');}resolve(false);return;}
+        try{await completeLogin(resp.access_token);resolve(true);}
+        catch(e){if(!silent){renderLogin();loginErr(e.message||'Sign-in failed.');}resolve(false);}
+      },
+      error_callback:err=>{if(!silent){renderLogin();loginErr((err&&err.message)||'Sign-in cancelled.');}resolve(false);}
+    });
+    gTokenClient.requestAccessToken({prompt:silent?'':'consent'});
+  });
+}
+async function completeLogin(token){
+  settings.driveToken=token;
+  const ur=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+token}});
+  if(!ur.ok)throw new Error('Could not read Google profile');
+  const u=await ur.json();
+  if(settings.userSub&&settings.userSub!==u.sub){state={funds:[],budget:[],actions:[],sellers:[],purchases:[]};for(const s of ['funds','budget','actions','sellers','purchases'])await persist(s);}
+  settings.user={email:u.email,name:u.name,picture:u.picture};settings.userSub=u.sub;settings.autoCsv=true;
+  await saveSettings();await ensureDriveFolder();await loadProfileFromDrive();await pullCsvFromDriveIfEmpty();
+  if(settings.apiKey)try{await saveProfileToDrive();}catch(e){}
+  await saveSettings();
+  hideLogin();updateUserChip();render();scheduleCsvSync();
+}
+async function googleLogout(){
+  const tok=settings.driveToken;
+  if(tok&&window.google&&google.accounts&&google.accounts.oauth2)try{google.accounts.oauth2.revoke(tok,()=>{});}catch(e){}
+  settings.apiKey='';settings.driveToken=null;settings.user=null;
+  await saveSettings();updateUserChip();showLogin();toast('Signed out');
+}
+function updateUserChip(){
+  const chip=$('user-chip');if(!chip)return;
+  if(!settings.user){chip.classList.remove('show');return;}
+  $('user-pic').src=settings.user.picture||'';$('user-name').textContent=settings.user.name||settings.user.email||'Signed in';
+  chip.classList.add('show');
+}
 async function driveFetch(url,opts){opts=opts||{};opts.headers=Object.assign({'Authorization':'Bearer '+settings.driveToken},opts.headers||{});
-  const r=await fetch(url,opts);if(r.status===401){settings.driveToken=null;await saveSettings();updateSyncPill();throw new Error('Drive session expired — reconnect');}return r;}
+  const r=await fetch(url,opts);if(r.status===401){settings.driveToken=null;await saveSettings();updateSyncPill();showLogin();throw new Error('Session expired — sign in again');}return r;}
 async function ensureDriveFolder(){
   if(settings.driveFolderId)return settings.driveFolderId;
   const q=encodeURIComponent("name='Site Ledger' and mimeType='application/vnd.google-apps.folder' and trashed=false");
@@ -532,6 +608,37 @@ async function ensureDriveFolder(){
   else{const cr=await driveFetch('https://www.googleapis.com/drive/v3/files',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({name:'Site Ledger',mimeType:'application/vnd.google-apps.folder'})});const cj=await cr.json();settings.driveFolderId=cj.id;}
   await saveSettings();return settings.driveFolderId;
+}
+async function findDriveFile(name){
+  await ensureDriveFolder();
+  const q=encodeURIComponent("name='"+name+"' and '"+settings.driveFolderId+"' in parents and trashed=false");
+  const r=await driveFetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id)');
+  const j=await r.json();return (j.files&&j.files[0]&&j.files[0].id)||null;
+}
+async function upsertDriveFile(name,blob){
+  const id=await findDriveFile(name);const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(id?{name}:{name,parents:[settings.driveFolderId]})],{type:'application/json'}));
+  form.append('file',blob);
+  if(id)await driveFetch('https://www.googleapis.com/upload/drive/v3/files/'+id+'?uploadType=multipart',{method:'PATCH',body:form});
+  else await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{method:'POST',body:form});
+}
+async function loadProfileFromDrive(){
+  const id=await findDriveFile(PROFILE_FILE);if(!id)return;
+  const r=await driveFetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media');if(!r.ok)return;
+  const p=await r.json();
+  if(p.provider)settings.provider=p.provider;if(p.apiKey!=null)settings.apiKey=p.apiKey;
+  if(p.model!=null)settings.model=p.model;if(p.autoCsv!=null)settings.autoCsv=p.autoCsv;
+}
+async function saveProfileToDrive(){
+  if(!settings.driveToken)return;
+  const blob=new Blob([JSON.stringify({provider:settings.provider,apiKey:settings.apiKey||'',model:settings.model||'',autoCsv:true})],{type:'application/json'});
+  await upsertDriveFile(PROFILE_FILE,blob);
+}
+async function pullCsvFromDriveIfEmpty(){
+  const empty=['funds','budget','actions','sellers','purchases'].every(s=>!state[s].length);if(!empty)return;
+  const id=await findDriveFile(CSV_FILE);if(!id)return;
+  const r=await driveFetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media');if(!r.ok)return;
+  const fresh=fromCSV(await r.text());state=fresh;for(const s of ['funds','budget','actions','sellers','purchases'])await persist(s);
 }
 function dataURLtoBlob(d){const [meta,b64]=d.split(',');const mime=(meta.match(/:(.*?);/)||[])[1]||'image/jpeg';
   const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type:mime});}
@@ -545,62 +652,59 @@ async function uploadPhotoToDrive(dataUrl,name){
 }
 let csvSyncT;function scheduleCsvSync(){clearTimeout(csvSyncT);csvSyncT=setTimeout(syncCsvToDrive,1500);}
 async function syncCsvToDrive(){
-  if(!settings.driveToken)return;try{await ensureDriveFolder();
-    const csv=toCSV();const blob=new Blob([csv],{type:'text/csv'});
-    const q=encodeURIComponent("name='site-ledger.csv' and '"+settings.driveFolderId+"' in parents and trashed=false");
-    const r=await driveFetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id)');const j=await r.json();
-    if(j.files&&j.files.length){const id=j.files[0].id;
-      const form=new FormData();form.append('metadata',new Blob([JSON.stringify({name:'site-ledger.csv'})],{type:'application/json'}));form.append('file',blob);
-      await driveFetch('https://www.googleapis.com/upload/drive/v3/files/'+id+'?uploadType=multipart',{method:'PATCH',body:form});}
-    else{const meta={name:'site-ledger.csv',parents:[settings.driveFolderId]};
-      const form=new FormData();form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));form.append('file',blob);
-      await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{method:'POST',body:form});}
-    toast('Synced to Drive');
+  if(!settings.driveToken)return;try{
+    await upsertDriveFile(CSV_FILE,new Blob([toCSV()],{type:'text/csv'}));toast('Synced to Drive');
   }catch(e){toast(e.message||'Drive sync failed');}
 }
 function updateSyncPill(){const on=!!settings.driveToken;$('sync-dot').classList.toggle('on',on);
-  $('sync-text').textContent=on?'Synced to Google Drive':'Local only';}
+  $('sync-text').textContent=on?(settings.user&&settings.user.email?'Signed in as '+settings.user.email:'Synced to Google Drive'):'Sign in required';}
 
 /* ---- settings ---- */
 $('open-settings').onclick=()=>{renderSettings();$('settings-overlay').classList.add('show');};
 $('settings-overlay').addEventListener('click',e=>{if(e.target.id==='settings-overlay')$('settings-overlay').classList.remove('show');});
 function renderSettings(){
-  const insecure=!secureContext();
+  const who=settings.user?(settings.user.name||settings.user.email):'';
   $('settings-modal').innerHTML=
     '<div class="modal-head"><p class="modal-title">Settings</p><button class="modal-close" id="set-close">&times;</button></div>'+
-    '<div class="set-section"><h3>AI receipt scanning</h3><p class="hint">Choose your provider and paste your API key. The key is stored only on this device.</p>'+
+    '<div class="set-section"><h3>Google account</h3><p class="hint">'+(who?'Signed in as <b>'+esc(who)+'</b>.':'Not signed in.')+'</p>'+
+    '<div class="set-row"><button class="set-btn accent" id="drive-syncnow">Sync now</button><button class="set-btn" id="google-logout">Sign out</button></div>'+
+    '<div class="set-note">Your AI keys live in <b>Site Ledger / site-ledger-settings.json</b> in your Google Drive. Ledger backup is site-ledger.csv. Photos go in the same folder.</div></div>'+
+    '<div class="set-section"><h3>AI receipt scanning</h3><p class="hint">Saved to your Google profile, then loaded on any device when you sign in.</p>'+
     '<div class="field" style="margin-bottom:10px"><label>Provider</label><select id="set-provider">'+
       '<option value="openai"'+(settings.provider==='openai'?' selected':'')+'>OpenAI (gpt-4o)</option>'+
       '<option value="qwen"'+(settings.provider==='qwen'?' selected':'')+'>Qwen-VL (DashScope)</option>'+
       '<option value="deepseek"'+(settings.provider==='deepseek'?' selected':'')+'>DeepSeek-VL</option></select></div>'+
     '<div class="field" style="margin-bottom:10px"><label>API key</label><input id="set-key" type="password" value="'+esc(settings.apiKey)+'" placeholder="sk-…"></div>'+
     '<div class="field"><label>Model (optional override)</label><input id="set-model" value="'+esc(settings.model)+'" placeholder="default per provider"></div>'+
-    '<div class="set-note">Calling these APIs from the browser exposes your key to anyone who can read this file. Fine for your own phone — don\'t share the file with a key saved in it.</div></div>'+
-    '<div class="set-section"><h3>Google Drive sync</h3><p class="hint">Optional. Backs up your data as <b>site-ledger.csv</b> and stores full receipt photos in a "Site Ledger" folder.</p>'+
-    (insecure?'<div class="set-note">Drive sync needs a secure context (https or localhost). You\'re on file:// now, so it\'s disabled. Manual CSV export/import below works everywhere.</div>':
-      ('<div class="field" style="margin-bottom:10px"><label>Google OAuth Client ID</label><input id="set-drive-id" value="'+esc(settings.driveClientId)+'" placeholder="…apps.googleusercontent.com"></div>'+
-       '<div class="set-row">'+(settings.driveToken?'<button class="set-btn" id="drive-disconnect">Disconnect Drive</button><button class="set-btn accent" id="drive-syncnow">Sync now</button>':'<button class="set-btn accent" id="drive-connect">Connect Google Drive</button>')+'</div>'+
-       '<div class="set-note">One-time setup: create an OAuth client ID in Google Cloud Console (see the setup guide) and paste it above.</div>'))+
-    '</div>'+
-    '<div class="set-section"><h3>Manual backup (CSV)</h3><p class="hint">Works offline and everywhere. Export a CSV you can keep or drop into Drive yourself; import to restore.</p>'+
+    '<div class="set-note">The key is stored in your Drive, not in this website. Receipt scanning still sends it from this browser to your AI provider.</div></div>'+
+    '<div class="set-section"><h3>Manual backup (CSV)</h3><p class="hint">Export a local copy, or import to replace current data.</p>'+
     '<div class="set-row"><button class="set-btn" id="csv-export">Export CSV</button>'+
     '<button class="set-btn" id="csv-import">Import CSV</button>'+
     '<input type="file" accept=".csv,text/csv" id="csv-file" style="display:none"></div></div>'+
     '<div class="modal-actions"><button class="btn-primary" id="set-save">Save settings</button></div>';
   $('set-close').onclick=()=>$('settings-overlay').classList.remove('show');
   $('set-save').onclick=async()=>{settings.provider=$('set-provider').value;settings.apiKey=$('set-key').value.trim();
-    settings.model=$('set-model').value.trim();const di=$('set-drive-id');if(di)settings.driveClientId=di.value.trim();
-    await saveSettings();updateSyncPill();$('settings-overlay').classList.remove('show');toast('Settings saved');};
+    settings.model=$('set-model').value.trim();await saveSettings();
+    try{await saveProfileToDrive();toast('Saved to your Google profile');}catch(e){toast(e.message||'Saved on this device only');}
+    updateSyncPill();$('settings-overlay').classList.remove('show');};
   $('csv-export').onclick=downloadCSV;
   $('csv-import').onclick=()=>$('csv-file').click();
   $('csv-file').onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)importCSVFile(f);};
-  const dc=$('drive-connect');if(dc)dc.onclick=driveConnect;
-  const dd=$('drive-disconnect');if(dd)dd.onclick=driveDisconnect;
   const ds=$('drive-syncnow');if(ds)ds.onclick=syncCsvToDrive;
+  const lo=$('google-logout');if(lo)lo.onclick=googleLogout;
 }
 
 /* ---- init ---- */
-(async function init(){try{await openDB();await loadAll();}catch(e){console.error(e);}render();})();
+(async function init(){
+  renderLogin();
+  try{
+    await openDB();await loadAll();
+    settings.driveToken=null;settings.user=null;
+    if(GOOGLE_CLIENT_ID)settings.driveClientId=GOOGLE_CLIENT_ID;
+    if(secureContext()&&clientId()){renderLogin({busy:true});const ok=await startGoogleLogin(true);if(ok)return;}
+  }catch(e){console.error(e);}
+  renderLogin();
+})();
 </script>
 </body>
 </html>
