@@ -45,7 +45,7 @@ Add `https://epounaj.github.io` as an authorised origin.
 
 | Item | Where |
 | --- | --- |
-| AI API key, provider, model | Your Drive: `Site Ledger/site-ledger-settings.json` |
+| AI API key, provider, model, custom API URL | Your Drive: `Site Ledger/site-ledger-settings.json` |
 | Ledger CSV | Your Drive: `Site Ledger/site-ledger.csv` |
 | Full receipt photos | Your Drive: `Site Ledger/` |
 | Working copy on this phone | Browser IndexedDB for this site |
@@ -62,9 +62,12 @@ Anyone with a Google account can open the public GitHub Pages URL and sign in to
 
 Settings → choose provider → paste key → Save (writes to your Drive profile):
 
-- **OpenAI** — default `gpt-4o`
-- **Qwen-VL** — default `qwen-vl-max` (international DashScope endpoint)
-- **DeepSeek** — use a vision-capable model name in the override if `deepseek-chat` fails
+- **OpenAI** — default `gpt-4o` if you leave Model on Default
+- **Qwen-VL** — default `qwen-vl-max`
+- **DeepSeek** — pick a vision-capable model from the list if `deepseek-chat` fails
+- **Custom (OpenAI-compatible)** — your own base URL + key. Tap **Load** to browse `/v1/models` (Groq, OpenRouter, Ollama, LM Studio, vLLM, etc.). The model must support vision (`image_url`) for receipt scanning.
+
+If the API cannot list models (CORS or no `/v1/models` route), choose **Other…** and type the model name.
 
 Scan still runs from the browser to the provider. Double-check amounts before saving.
 

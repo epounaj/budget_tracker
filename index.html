@@ -96,20 +96,32 @@ h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
 .loading{text-align:center;padding:48px;color:var(--ink-3);font-size:13px;}
 .overlay{display:none;min-height:100vh;background:rgba(26,26,26,.42);align-items:flex-start;justify-content:center;padding:calc(28px + var(--safe-top)) 16px 28px;position:fixed;inset:0;z-index:40;overflow-y:auto;}
 .overlay.show{display:flex;}
-.modal{background:var(--surface);border-radius:var(--radius);width:100%;max-width:540px;padding:22px;box-shadow:0 12px 40px rgba(0,0,0,.16);margin:auto 0;}
-.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
-.modal-title{font-size:16px;font-weight:600;margin:0;}
-.modal-close{background:none;border:none;cursor:pointer;color:var(--ink-2);padding:4px;border-radius:6px;font-size:20px;line-height:1;}
-.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:13px;}
+.modal{background:var(--surface);border-radius:var(--radius);width:100%;max-width:460px;padding:22px 22px 20px;box-shadow:0 12px 40px rgba(0,0,0,.16);margin:auto 0;}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.modal-title{font-size:18px;font-weight:600;margin:0;letter-spacing:-.02em;}
+.modal-close{background:none;border:none;cursor:pointer;color:var(--ink-2);padding:4px;border-radius:6px;font-size:22px;line-height:1;}
+.modal-sub{font-size:13px;color:var(--ink-2);margin:0 0 18px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 12px;}
 .field label{display:block;font-size:12px;font-weight:500;color:var(--ink-2);margin-bottom:6px;}
-.field input,.field select{width:100%;font-family:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink);}
+.field input,.field select{width:100%;font-family:inherit;font-size:16px;padding:11px 12px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink);appearance:none;-webkit-appearance:none;}
+.field select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%236B6B6B' d='M1 1l5 5 5-5'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;}
 .field input:focus,.field select:focus{outline:none;border-color:var(--accent);}
 .field.wide{grid-column:1/-1;}
+.model-row{display:flex;gap:8px;align-items:stretch;}
+.model-row select{flex:1;min-width:0;}
+.model-row .set-btn{flex-shrink:0;white-space:nowrap;}
+.model-filter{margin-bottom:8px;}
+.field-hint.err{color:var(--spend);}
 .photo-field{grid-column:1/-1;}
 .ocr-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;font-weight:550;font-size:14px;background:var(--accent-soft);color:var(--accent);border:1px solid #BCD8C8;border-radius:9px;padding:12px 16px;cursor:pointer;width:100%;}
 .ocr-btn:disabled{opacity:.55;cursor:default;}
 .ocr-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;}
-.photo-btn{display:inline-flex;align-items:center;gap:8px;font-family:inherit;font-weight:500;font-size:14px;background:var(--surface-2);color:var(--ink);border:1px dashed var(--line-2);border-radius:9px;padding:11px 16px;cursor:pointer;width:100%;justify-content:center;margin-top:9px;}
+.field-hint{font-size:11px;color:var(--ink-3);margin:4px 0 0;line-height:1.4;}
+.req::after{content:' *';color:var(--spend);}
+.photo-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px;}
+.photo-btn{display:inline-flex;align-items:center;gap:8px;font-family:inherit;font-weight:500;font-size:13.5px;background:var(--surface-2);color:var(--ink);border:1px dashed var(--line-2);border-radius:9px;padding:11px 12px;cursor:pointer;width:100%;justify-content:center;margin-top:0;}
+.inline-ai{margin-top:10px;padding:12px;background:var(--surface-2);border-radius:9px;}
+.inline-ai p{font-size:12px;color:var(--ink-2);margin:0 0 10px;}
 .photo-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;}
 .photo-preview{margin-top:11px;display:none;align-items:flex-start;gap:12px;}
 .photo-preview.show{display:flex;}
@@ -127,7 +139,9 @@ h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
 .set-section h3{font-size:13px;font-weight:600;margin:0 0 4px;}
 .set-section p.hint{font-size:12px;color:var(--ink-2);margin:0 0 12px;}
 .set-row{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:10px;}
-.set-btn{font-family:inherit;font-size:13px;font-weight:500;background:var(--surface-2);border:1px solid var(--line-2);border-radius:9px;padding:10px 14px;cursor:pointer;color:var(--ink);}
+.set-btn{font-family:inherit;font-size:13px;font-weight:500;background:var(--surface-2);border:1px solid var(--line-2);border-radius:9px;padding:10px 14px;cursor:pointer;color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;}
+a.set-btn:hover{background:var(--line);}
+.google-btn:focus-visible,.add-btn:focus-visible,.btn-primary:focus-visible,.settings-btn:focus-visible,.tab-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 .set-btn.accent{background:var(--accent);color:#fff;border-color:var(--accent);}
 .set-note{font-size:11.5px;color:var(--ink-3);background:var(--surface-2);border-radius:8px;padding:10px 12px;margin-top:8px;line-height:1.5;}
 .lightbox{display:none;min-height:100vh;background:rgba(20,20,20,.9);align-items:center;justify-content:center;padding:24px;position:fixed;inset:0;z-index:60;}
@@ -140,7 +154,11 @@ h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
   .avail-value{font-size:28px;}
   .stat-grid{grid-template-columns:repeat(2,1fr);gap:14px 12px;}
   .avail-hint{display:none;}
-  .modal{padding:18px;}
+  .overlay{align-items:flex-end;padding:0;}
+  .modal{max-width:none;border-radius:18px 18px 0 0;padding:18px 16px calc(16px + var(--safe-bottom));}
+  .form-grid{grid-template-columns:1fr;}
+  .modal-actions{flex-direction:column-reverse;}
+  .btn-cancel,.btn-primary{width:100%;}
 }
 </style>
 </head>
@@ -198,7 +216,7 @@ h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
 /* ============ Site Ledger — local-first PWA ============ */
 const CUR='Rs ';
 /* Public OAuth Web client ID — not a secret. Leave empty to paste it on first login. */
-const GOOGLE_CLIENT_ID='';
+const GOOGLE_CLIENT_ID='379149446558-pk7favl7g2hj1dugkhqog4kbb56aut0r.apps.googleusercontent.com';
 const PROFILE_FILE='site-ledger-settings.json';
 const CSV_FILE='site-ledger.csv';
 const money=n=>CUR+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
@@ -224,17 +242,23 @@ function idbGetMeta(k){return new Promise((res)=>{const r=tx('meta','readonly').
 function idbSetMeta(k,v){return idbPut('meta',{k,v});}
 
 let state={funds:[],budget:[],actions:[],sellers:[],purchases:[]};
-let settings={provider:'openai',apiKey:'',model:'',driveClientId:'',driveToken:null,driveFolderId:'',user:null,userSub:'',autoCsv:true};
-let activeTab='funds',editing=null,editKind=null,pendingPhoto=null,pendingFullPhoto=null;
+let settings={provider:'openai',apiKey:'',model:'',apiBase:'',driveClientId:'',driveToken:null,driveFolderId:'',user:null,userSub:'',autoCsv:true};
+let activeTab='funds',editing=null,editKind=null,pendingPhoto=null,pendingFullPhoto=null,photoCleared=false;
+function finiteNum(s){const n=+s;return s!==''&&Number.isFinite(n);}
 
 async function loadAll(){for(const s of ['funds','budget','actions','sellers','purchases'])state[s]=await idbAll(s);
   const st=await idbGetMeta('settings');if(st)settings=Object.assign(settings,st);}
 async function persist(store){
-  // wipe+rewrite that store (simple + safe for small data)
-  await new Promise((res,rej)=>{const r=tx(store,'readwrite').clear();r.onsuccess=()=>res();r.onerror=()=>rej(r.error);});
-  for(const row of state[store])await idbPut(store,row);
+  await new Promise((res,rej)=>{
+    const t=db.transaction(store,'readwrite');const os=t.objectStore(store);os.clear();
+    for(const row of state[store])os.put(row);
+    t.oncomplete=()=>res();t.onerror=()=>rej(t.error);
+  });
 }
-async function saveSettings(){await idbSetMeta('settings',settings);}
+async function saveSettings(){
+  const snap=Object.assign({},settings,{driveToken:null});
+  await idbSetMeta('settings',snap);
+}
 
 /* ---- calcs ---- */
 const loanReceived=()=>state.funds.filter(f=>f.type==='loan').reduce((s,f)=>s+(+f.amount||0),0);
@@ -325,36 +349,46 @@ function renderPurchases(){
 }
 
 /* ---- modal ---- */
-const TITLES={funds:'funds entry',budget:'budget category',actions:'action',sellers:'seller',purchases:'purchase'};
+const TITLES={funds:['Add funds','Edit funds'],budget:['Add budget','Edit budget'],actions:['Add task','Edit task'],sellers:['Add seller','Edit seller'],purchases:['Add purchase','Edit purchase']};
 function openModal(kind,rec){
-  editKind=kind;editing=rec||null;
+  editKind=kind;editing=rec||null;photoCleared=false;
   pendingPhoto=(kind==='purchases'&&rec)?(rec.thumb||null):null;
   pendingFullPhoto=null;
-  $('modal').innerHTML='<div class="modal-head"><p class="modal-title">'+(rec?'Edit ':'Add ')+TITLES[kind]+'</p>'+
-    '<button class="modal-close" id="modal-close">&times;</button></div>'+formBody(kind,rec)+
+  const title=(rec?TITLES[kind][1]:TITLES[kind][0]);
+  const sub={
+    funds:'How much came in, and from where.',
+    budget:'A category and the amount you planned for it.',
+    actions:'One thing still to do. Due date is optional.',
+    sellers:'A supplier and their quote, if you have it.',
+    purchases:'Scan a receipt or type the amount. A photo is saved on this phone; the full image goes to Drive when you Save.'
+  }[kind];
+  $('modal').innerHTML='<div class="modal-head"><p class="modal-title">'+title+'</p>'+
+    '<button class="modal-close" id="modal-close" aria-label="Close">&times;</button></div>'+
+    '<p class="modal-sub">'+sub+'</p>'+formBody(kind,rec)+
     '<p class="error-text" id="modal-error"></p>'+
-    '<div class="modal-actions"><button class="btn-primary" id="modal-save">Save</button>'+
+    '<div class="modal-actions"><button class="btn-primary" id="modal-save">'+(rec?'Save changes':'Save')+'</button>'+
     '<button class="btn-cancel" id="modal-cancel">Cancel</button></div>';
   $('overlay').classList.add('show');bindModal();
+  setTimeout(()=>{const el=$('m-amount')||$('m-title')||$('m-name')||$('m-price')||$('m-category');if(el)el.focus();},40);
 }
 function closeModal(){$('overlay').classList.remove('show');editing=null;editKind=null;pendingPhoto=null;pendingFullPhoto=null;}
 function formBody(kind,p){
   if(kind==='funds'){p=p||{type:'loan',label:'',amount:'',date:todayStr(),notes:''};
     return '<div class="form-grid">'+
-      '<div class="field"><label>Type</label><select id="m-type"><option value="loan"'+(p.type==='loan'?' selected':'')+'>Loan phase</option><option value="cash"'+(p.type==='cash'?' selected':'')+'>Own cash</option></select></div>'+
-      '<div class="field"><label>Label</label><input id="m-label" value="'+esc(p.label)+'" placeholder="e.g. Loan phase 1"></div>'+
-      '<div class="field"><label>Amount</label><input type="number" inputmode="decimal" id="m-amount" value="'+esc(p.amount)+'" placeholder="0"></div>'+
-      '<div class="field"><label>Date received</label><input type="date" id="m-date" value="'+esc(p.date)+'"></div>'+
+      '<div class="field"><label class="req">Amount (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-amount" value="'+esc(p.amount)+'" placeholder="e.g. 500000"></div>'+
+      '<div class="field"><label>Source</label><select id="m-type"><option value="loan"'+(p.type==='loan'?' selected':'')+'>Loan phase</option><option value="cash"'+(p.type==='cash'?' selected':'')+'>Own cash</option></select></div>'+
+      '<div class="field"><label>Date</label><input type="date" id="m-date" value="'+esc(p.date||todayStr())+'"></div>'+
+      '<div class="field"><label>Label</label><input id="m-label" value="'+esc(p.label)+'" placeholder="e.g. Phase 1"></div>'+
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="'+esc(p.notes)+'" placeholder="Optional"></div></div>';}
   if(kind==='budget'){p=p||{category:'',budgeted:'',notes:''};
     return '<div class="form-grid">'+
-      '<div class="field"><label>Category</label><input list="category-options" id="m-category" value="'+esc(p.category)+'" placeholder="e.g. Roofing"></div>'+
-      '<div class="field"><label>Budgeted amount</label><input type="number" inputmode="decimal" id="m-budgeted" value="'+esc(p.budgeted)+'" placeholder="0"></div>'+
+      '<div class="field"><label class="req">Category</label><input list="category-options" id="m-category" value="'+esc(p.category)+'" placeholder="Roofing, Kitchen…"></div>'+
+      '<div class="field"><label class="req">Planned (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-budgeted" value="'+esc(p.budgeted)+'" placeholder="e.g. 200000"></div>'+
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="'+esc(p.notes)+'" placeholder="Optional"></div></div>';}
   if(kind==='actions'){p=p||{title:'',due:'',status:'pending',notes:''};
     return '<div class="form-grid">'+
-      '<div class="field wide"><label>Task</label><input id="m-title" value="'+esc(p.title)+'" placeholder="e.g. Get quote for tiles"></div>'+
-      '<div class="field"><label>Due date</label><input type="date" id="m-due" value="'+esc(p.due)+'"></div>'+
+      '<div class="field wide"><label class="req">Task</label><input id="m-title" value="'+esc(p.title)+'" placeholder="e.g. Get quote for tiles"></div>'+
+      '<div class="field"><label>Due</label><input type="date" id="m-due" value="'+esc(p.due)+'"></div>'+
       '<div class="field"><label>Status</label><select id="m-status">'+
       '<option value="pending"'+(p.status==='pending'?' selected':'')+'>Pending</option>'+
       '<option value="progress"'+(p.status==='progress'?' selected':'')+'>In progress</option>'+
@@ -362,10 +396,10 @@ function formBody(kind,p){
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="'+esc(p.notes)+'" placeholder="Optional"></div></div>';}
   if(kind==='sellers'){p=p||{name:'',contact:'',item:'',price:'',status:'shortlisted',notes:''};
     return '<div class="form-grid">'+
-      '<div class="field"><label>Seller name</label><input id="m-name" value="'+esc(p.name)+'" placeholder="e.g. ABC Hardware"></div>'+
-      '<div class="field"><label>Contact</label><input id="m-contact" value="'+esc(p.contact)+'" placeholder="Phone / email"></div>'+
-      '<div class="field"><label>Item / service</label><input list="category-options" id="m-item" value="'+esc(p.item)+'" placeholder="e.g. Roof tiles"></div>'+
-      '<div class="field"><label>Quoted price</label><input type="number" inputmode="decimal" id="m-price" value="'+esc(p.price)+'" placeholder="0"></div>'+
+      '<div class="field wide"><label class="req">Name</label><input id="m-name" value="'+esc(p.name)+'" placeholder="e.g. ABC Hardware" autocomplete="off"></div>'+
+      '<div class="field"><label>For</label><input list="category-options" id="m-item" value="'+esc(p.item)+'" placeholder="e.g. Roof tiles"></div>'+
+      '<div class="field"><label>Quoted (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="'+esc(p.price)+'" placeholder="Optional"></div>'+
+      '<div class="field"><label>Contact</label><input id="m-contact" value="'+esc(p.contact)+'" placeholder="Optional" autocomplete="off"></div>'+
       '<div class="field"><label>Status</label><select id="m-status">'+
       '<option value="shortlisted"'+(p.status==='shortlisted'?' selected':'')+'>Shortlisted</option>'+
       '<option value="contacted"'+(p.status==='contacted'?' selected':'')+'>Contacted</option>'+
@@ -373,36 +407,74 @@ function formBody(kind,p){
       '<option value="rejected"'+(p.status==='rejected'?' selected':'')+'>Rejected</option></select></div>'+
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="'+esc(p.notes)+'" placeholder="Optional"></div></div>';}
   if(kind==='purchases'){p=p||{item:'',category:'',seller:'',price:'',date:todayStr(),receipt:'',thumb:null};
-    const cur=pendingPhoto;
+    const cur=pendingPhoto;const hasKey=!!settings.apiKey;
     return '<div class="photo-field" style="margin-bottom:14px">'+
-      '<button type="button" class="ocr-btn" id="m-ocr"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>Scan receipt with AI</button>'+
-      '<label class="photo-btn"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Attach photo only'+
-      '<input type="file" accept="image/*" capture="environment" id="m-photo" style="display:none"></label>'+
+      '<button type="button" class="ocr-btn" id="m-ocr"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>'+(hasKey?'Scan receipt with AI':'Scan receipt')+'</button>'+
+      (hasKey?'':'<div class="inline-ai" id="inline-ai"><p>Paste your AI key once. It is saved to your Drive profile, then scan works.</p>'+
+        '<div class="form-grid">'+
+        '<div class="field"><label>Provider</label><select id="m-ai-provider">'+providerOptionsHtml()+'</select></div>'+
+        '<div class="field"><label>API key</label><input id="m-ai-key" type="password" placeholder="sk-… or your provider key" autocomplete="off"></div></div>'+
+        '<div id="m-ai-custom" style="display:none;margin-top:10px">'+
+        '<div class="field wide"><label class="req">API base URL</label><input id="m-ai-base" value="'+esc(settings.apiBase)+'" placeholder="https://api.example.com/v1" autocomplete="off"><p class="field-hint">OpenAI-compatible. Use /v1 or the full /v1/chat/completions URL.</p></div></div>'+
+        modelPickerHtml('m-ai')+'</div>')+
+      '<div class="photo-actions">'+
+      '<label class="photo-btn"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Camera'+
+      '<input type="file" accept="image/*" capture="environment" id="m-photo-cam" style="display:none"></label>'+
+      '<label class="photo-btn"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Gallery'+
+      '<input type="file" accept="image/*" id="m-photo" style="display:none"></label></div>'+
+      '<p class="field-hint">Thumbnail stays on this phone. Full photo uploads to My Drive → Site Ledger when you Save.</p>'+
       '<div class="ocr-status" id="m-ocr-status"></div>'+
       '<div class="photo-preview '+(cur?'show':'')+'" id="m-photo-preview"><img id="m-photo-img" src="'+(cur||'')+'" alt="Receipt">'+
       '<button type="button" class="photo-remove" id="m-photo-remove">Remove photo</button></div></div>'+
       '<div class="form-grid">'+
-      '<div class="field"><label>Item</label><input id="m-item" value="'+esc(p.item)+'" placeholder="e.g. 50 bags cement"></div>'+
-      '<div class="field"><label>Category</label><input list="category-options" id="m-category" value="'+esc(p.category)+'" placeholder="e.g. Foundation"></div>'+
+      '<div class="field"><label class="req">Price (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="'+esc(p.price)+'" placeholder="What you paid"></div>'+
+      '<div class="field"><label class="req">Item</label><input id="m-item" value="'+esc(p.item)+'" placeholder="e.g. 50 bags cement"></div>'+
+      '<div class="field"><label>Category</label><input list="category-options" id="m-category" value="'+esc(p.category)+'" placeholder="Foundation…"></div>'+
       '<div class="field"><label>Seller</label><input id="m-seller" value="'+esc(p.seller)+'" placeholder="Who you bought from"></div>'+
-      '<div class="field"><label>Price paid</label><input type="number" inputmode="decimal" id="m-price" value="'+esc(p.price)+'" placeholder="0"></div>'+
-      '<div class="field"><label>Date</label><input type="date" id="m-date" value="'+esc(p.date)+'"></div>'+
-      '<div class="field"><label>Receipt ref</label><input id="m-receipt" value="'+esc(p.receipt)+'" placeholder="Receipt no. (optional)"></div></div>';}
+      '<div class="field"><label>Date</label><input type="date" id="m-date" value="'+esc(p.date||todayStr())+'"></div>'+
+      '<div class="field"><label>Receipt no.</label><input id="m-receipt" value="'+esc(p.receipt)+'" placeholder="Optional"></div></div>';}
   return '';
 }
 function bindModal(){
   $('modal-close').onclick=closeModal;$('modal-cancel').onclick=closeModal;$('modal-save').onclick=saveModal;
-  const pin=$('m-photo');
-  if(pin)pin.addEventListener('change',async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;await handlePhoto(f);});
+  $('modal').addEventListener('keydown',e=>{
+    if(e.key!=='Enter'||!e.target||e.target.id==='modal-save')return;
+    if(e.target.tagName==='BUTTON'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')return;
+    if(e.target.closest&&e.target.closest('#inline-ai'))return;
+    e.preventDefault();saveModal();
+  });
+  const onFile=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;photoCleared=false;await handlePhoto(f);};
+  const pin=$('m-photo');if(pin)pin.addEventListener('change',onFile);
+  const cam=$('m-photo-cam');if(cam)cam.addEventListener('change',onFile);
   const prm=$('m-photo-remove');
-  if(prm)prm.onclick=()=>{pendingPhoto=null;pendingFullPhoto=null;const pv=$('m-photo-preview');if(pv)pv.classList.remove('show');const pi=$('m-photo');if(pi)pi.value='';};
+  if(prm)prm.onclick=()=>{pendingPhoto=null;pendingFullPhoto=null;photoCleared=true;const pv=$('m-photo-preview');if(pv)pv.classList.remove('show');['m-photo','m-photo-cam'].forEach(id=>{const el=$(id);if(el)el.value='';});};
   const ocr=$('m-ocr');
-  if(ocr)ocr.onclick=()=>{
-    if(!settings.apiKey){ocrStatus('Add your AI API key in Settings first.',true);return;}
-    let inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.capture='environment';
-    inp.onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;await handlePhoto(f);await runOCR();};
-    inp.click();
-  };
+  if(ocr)ocr.onclick=startReceiptScan;
+  wireModelPicker('m-ai','m-ai-custom');
+}
+async function saveInlineAiKey(){
+  const k=$('m-ai-key'),p=$('m-ai-provider'),b=$('m-ai-base');
+  if(p)settings.provider=p.value;
+  if(k&&k.value.trim())settings.apiKey=k.value.trim();
+  if(b)settings.apiBase=b.value.trim();
+  const model=readModelValue('m-ai');
+  if(model||settings.provider==='custom')settings.model=model;
+  if(!settings.apiKey)return false;
+  if(settings.provider==='custom'&&(!settings.apiBase||!settings.model))return false;
+  await saveSettings();try{await saveProfileToDrive();}catch(e){}
+  return true;
+}
+async function startReceiptScan(){
+  if(!settings.apiKey||(settings.provider==='custom'&&(!settings.apiBase||!settings.model))){
+    const ok=await saveInlineAiKey();
+    if(!ok){
+      const custom=settings.provider==='custom';
+      ocrStatus(custom?($('m-ai-base')?'Enter the API URL, model name, and key.':'Open Settings and enter the custom API URL and model.'):'Paste your AI API key above, or in Settings.',true);
+      const focus=$('m-ai-base')||$('m-ai-key');if(focus)focus.focus();return;}
+  }
+  let inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.capture='environment';
+  inp.onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;photoCleared=false;await handlePhoto(f);await runOCR();};
+  inp.click();
 }
 async function handlePhoto(file){
   pendingFullPhoto=await compressImage(file,1600,0.7);   // full-res for Drive/OCR
@@ -413,7 +485,7 @@ async function handlePhoto(file){
 function ocrStatus(msg,err){const el=$('m-ocr-status');if(!el)return;el.textContent=msg;el.classList.add('show');el.classList.toggle('err',!!err);}
 async function runOCR(){
   const btn=$('m-ocr');if(btn)btn.disabled=true;
-  ocrStatus('Reading receipt with '+settings.provider+'…',false);
+  ocrStatus('Reading receipt with '+(settings.provider==='custom'?(settings.model||'custom model'):settings.provider)+'…',false);
   try{
     const data=await callVisionOCR(pendingFullPhoto||pendingPhoto);
     if(data.seller&&$('m-seller')&&!$('m-seller').value)$('m-seller').value=data.seller;
@@ -428,11 +500,157 @@ async function runOCR(){
 }
 /* ---- provider-agnostic vision call ---- */
 const OCR_PROMPT='You are a receipt parser. Extract fields from this receipt image and reply ONLY with strict JSON, no markdown, no prose. Schema: {"seller":string,"date":"YYYY-MM-DD","total":number,"item":string,"category":string,"receipt":string}. "item" = short summary of what was bought. "category" = one of Foundation, Structure / Masonry, Roofing, Electrical, Plumbing, Tiles / Flooring, Doors / Windows, Paint / Finishing, Kitchen, Bathroom, Labour, Permits / Fees, Other. "receipt" = receipt/invoice number if visible else empty. Use empty string or null if a field is unknown.';
+const PROVIDER_DEFAULTS={openai:'gpt-4o',qwen:'qwen-vl-max',deepseek:'deepseek-chat'};
+const modelsCache={};
+function providerOptionsHtml(){
+  return [['openai','OpenAI'],['qwen','Qwen-VL'],['deepseek','DeepSeek'],['custom','Custom (OpenAI-compatible)']].map(function(o){
+    return '<option value="'+o[0]+'"'+(settings.provider===o[0]?' selected':'')+'>'+o[1]+'</option>';
+  }).join('');
+}
+function modelPickerHtml(ns){
+  return '<div class="field" style="margin-top:10px"><label id="'+ns+'-model-label">Model</label>'+
+    '<input id="'+ns+'-model-filter" class="model-filter" placeholder="Filter models…" autocomplete="off" style="display:none">'+
+    '<div class="model-row"><select id="'+ns+'-model"><option value="">Paste key, then load models</option></select>'+
+    '<button type="button" class="set-btn" id="'+ns+'-models-refresh">Load</button></div>'+
+    '<input id="'+ns+'-model-other" placeholder="Type a model name" autocomplete="off" style="display:none;margin-top:8px">'+
+    '<p class="field-hint" id="'+ns+'-models-status">Paste your API key, then tap Load to browse models from the API.</p></div>';
+}
+function openaiV1Root(base){
+  let u=(base||'').trim();
+  if(!u)throw new Error('Enter the API base URL');
+  if(!/^https?:\/\//i.test(u))throw new Error('API URL must start with http:// or https://');
+  return u.replace(/\/+$/,'').replace(/\/chat\/completions$/i,'');
+}
+function chatCompletionsUrl(base){return openaiV1Root(base)+'/chat/completions';}
+function providerModelsUrl(provider,apiBase){
+  if(provider==='openai')return 'https://api.openai.com/v1/models';
+  if(provider==='qwen')return 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/models';
+  if(provider==='deepseek')return 'https://api.deepseek.com/v1/models';
+  if(provider==='custom')return openaiV1Root(apiBase)+'/models';
+  throw new Error('Unknown provider');
+}
+function parseModelsList(json){
+  let rows=[];
+  if(json&&Array.isArray(json.data))rows=json.data;
+  else if(json&&Array.isArray(json.models))rows=json.models;
+  else if(Array.isArray(json))rows=json;
+  const seen={};
+  const ids=rows.map(r=>typeof r==='string'?r:(r&&(r.id||r.name||r.model||''))).map(s=>String(s).trim()).filter(Boolean)
+    .filter(id=>{if(seen[id])return false;seen[id]=1;return true;});
+  ids.sort((a,b)=>{
+    const rank=id=>{const s=id.toLowerCase();return (/vision|vl-|gpt-4o|4o-mini|omni|gpt-4\.1/.test(s)?'0':'1')+s;};
+    const ka=rank(a),kb=rank(b);return ka<kb?-1:ka>kb?1:0;
+  });
+  return ids;
+}
+async function listProviderModels(provider,apiKey,apiBase){
+  if(!apiKey)throw new Error('Paste an API key first');
+  const url=providerModelsUrl(provider,apiBase);
+  const res=await fetch(url,{headers:{Authorization:'Bearer '+apiKey}});
+  if(!res.ok){
+    let extra='';
+    try{const t=await res.text();const j=JSON.parse(t);extra=(j.error&&(j.error.message||j.error))||'';}catch(e){}
+    throw new Error('Could not list models ('+res.status+(extra?': '+String(extra).slice(0,100):'')+')');
+  }
+  return parseModelsList(await res.json());
+}
+function readModelValue(ns){
+  const sel=$(ns+'-model'),other=$(ns+'-model-other');
+  if(!sel)return '';
+  if(sel.value==='__other__')return other?(other.value||'').trim():'';
+  return (sel.value||'').trim();
+}
+function wireModelPicker(ns,customWrapId){
+  const providerEl=$(ns+'-provider'),keyEl=$(ns+'-key'),baseEl=$(ns+'-base');
+  const modelEl=$(ns+'-model'),otherEl=$(ns+'-model-other'),filterEl=$(ns+'-model-filter');
+  const statusEl=$(ns+'-models-status'),refreshEl=$(ns+'-models-refresh');
+  const labelEl=$(ns+'-model-label'),wrap=$(customWrapId);
+  if(!modelEl)return;
+  let loadSeq=0;
+  function snap(){
+    return{
+      provider:providerEl?providerEl.value:settings.provider,
+      apiKey:keyEl?(keyEl.value||'').trim():(settings.apiKey||''),
+      apiBase:baseEl?(baseEl.value||'').trim():(settings.apiBase||'')
+    };
+  }
+  function cacheKey(s){return s.provider+'|'+(s.apiBase||'')+'|'+(s.apiKey||'');}
+  function syncCustom(){
+    const c=providerEl&&providerEl.value==='custom';
+    if(wrap)wrap.style.display=c?'':'none';
+    if(labelEl)labelEl.classList.toggle('req',!!c);
+  }
+  function syncOther(){
+    const show=modelEl.value==='__other__';
+    if(otherEl)otherEl.style.display=show?'block':'none';
+  }
+  function renderOptions(list,currentModel){
+    const s=snap();
+    const def=PROVIDER_DEFAULTS[s.provider];
+    const have={};
+    let html=def?'<option value="">Default — '+esc(def)+'</option>':'<option value="">Select a model</option>';
+    (list||[]).forEach(id=>{have[id]=1;html+='<option value="'+esc(id)+'">'+esc(id)+'</option>';});
+    if(currentModel&&!have[currentModel]&&currentModel!=='__other__')html+='<option value="'+esc(currentModel)+'">'+esc(currentModel)+'</option>';
+    html+='<option value="__other__">Other…</option>';
+    modelEl.innerHTML=html;
+    if(currentModel){
+      modelEl.value=currentModel;
+      if(modelEl.value!==currentModel){modelEl.value='__other__';if(otherEl)otherEl.value=currentModel;}
+    }else modelEl.value='';
+    syncOther();
+  }
+  function paint(all,currentModel,note,err){
+    modelEl._allModels=all||[];
+    const q=filterEl?(filterEl.value||'').trim().toLowerCase():'';
+    const shown=q?modelEl._allModels.filter(id=>id.toLowerCase().indexOf(q)>=0):modelEl._allModels;
+    renderOptions(shown,currentModel);
+    if(filterEl)filterEl.style.display=modelEl._allModels.length>20?'block':'none';
+    if(statusEl){statusEl.textContent=note||(modelEl._allModels.length?modelEl._allModels.length+' models':'Paste your API key, then tap Load.');statusEl.classList.toggle('err',!!err);}
+  }
+  async function load(force){
+    const s=snap();
+    if(s.provider==='custom'&&!s.apiBase){paint(modelEl._allModels||[],readModelValue(ns),'Enter the API base URL, then tap Load.',true);return;}
+    if(!s.apiKey){paint(modelEl._allModels||[],readModelValue(ns),'Paste your API key, then tap Load.',true);return;}
+    const ck=cacheKey(s);
+    if(!force&&modelsCache[ck]){paint(modelsCache[ck],readModelValue(ns)||settings.model,modelsCache[ck].length+' models');return;}
+    const seq=++loadSeq;
+    if(statusEl){statusEl.textContent='Loading models…';statusEl.classList.remove('err');}
+    if(refreshEl){refreshEl.disabled=true;refreshEl.textContent='…';}
+    try{
+      const models=await listProviderModels(s.provider,s.apiKey,s.apiBase);
+      if(seq!==loadSeq)return;
+      modelsCache[ck]=models;
+      paint(models,readModelValue(ns)||settings.model,models.length?(models.length+' models from API'):'API returned no models');
+    }catch(e){
+      if(seq!==loadSeq)return;
+      const msg=/failed to fetch|networkerror|load failed/i.test(String(e.message||e))
+        ?'Could not reach /v1/models from this browser. Choose Other… and type the model name.'
+        :(e.message||'Could not list models');
+      paint(modelEl._allModels||[],readModelValue(ns)||settings.model,msg,true);
+    }
+    if(refreshEl){refreshEl.disabled=false;refreshEl.textContent='Load';}
+  }
+  if(providerEl)providerEl.addEventListener('change',()=>{syncCustom();load(true);});
+  if(keyEl){keyEl.addEventListener('change',()=>load(true));keyEl.addEventListener('paste',()=>setTimeout(()=>load(true),50));}
+  if(baseEl)baseEl.addEventListener('change',()=>load(true));
+  modelEl.addEventListener('change',syncOther);
+  if(filterEl)filterEl.addEventListener('input',()=>paint(modelEl._allModels||[],readModelValue(ns)));
+  if(refreshEl)refreshEl.onclick=()=>load(true);
+  const initial=settings.model||'';
+  paint(initial?[initial]:[],initial,'Paste your API key, then tap Load to browse models from the API.');
+  syncCustom();
+  if(snap().apiKey&&(snap().provider!=='custom'||snap().apiBase))load(false);
+}
 function providerConfig(){
   const p=settings.provider;
   if(p==='openai')return{url:'https://api.openai.com/v1/chat/completions',model:settings.model||'gpt-4o',auth:'Bearer '+settings.apiKey};
   if(p==='qwen')return{url:'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',model:settings.model||'qwen-vl-max',auth:'Bearer '+settings.apiKey};
   if(p==='deepseek')return{url:'https://api.deepseek.com/v1/chat/completions',model:settings.model||'deepseek-chat',auth:'Bearer '+settings.apiKey};
+  if(p==='custom'){
+    const model=(settings.model||'').trim();
+    if(!model)throw new Error('Enter a model name for the custom API');
+    return{url:chatCompletionsUrl(settings.apiBase),model:model,auth:'Bearer '+settings.apiKey};
+  }
   throw new Error('Unknown provider');
 }
 async function callVisionOCR(dataUrl){
@@ -442,7 +660,11 @@ async function callVisionOCR(dataUrl){
     {type:'image_url',image_url:{url:dataUrl}}
   ]}],max_tokens:400,temperature:0};
   const res=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':cfg.auth},body:JSON.stringify(body)});
-  if(!res.ok){const t=await res.text();throw new Error('API '+res.status);}
+  if(!res.ok){
+    let extra='';
+    try{const t=await res.text();const j=JSON.parse(t);extra=(j.error&&(j.error.message||j.error))||'';}catch(e){}
+    throw new Error('API '+res.status+(extra?': '+String(extra).slice(0,140):''));
+  }
   const json=await res.json();
   let txt=(json.choices&&json.choices[0]&&json.choices[0].message&&json.choices[0].message.content)||'';
   txt=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
@@ -452,18 +674,19 @@ async function callVisionOCR(dataUrl){
 function showErr(msg){const e=$('modal-error');e.textContent=msg;e.classList.add('show');}
 async function saveModal(){
   const k=editKind,val=id=>{const el=$(id);return el?el.value:'';};let obj;
-  if(k==='funds'){const a=val('m-amount');if(a===''||isNaN(+a))return showErr('Enter a valid amount.');
+  if(k==='funds'){const a=val('m-amount');if(!finiteNum(a)||+a<0)return showErr('Enter a valid amount.');
     obj={type:val('m-type'),label:val('m-label').trim(),amount:+a,date:val('m-date')||todayStr(),notes:val('m-notes').trim()};}
-  else if(k==='budget'){const c=val('m-category').trim(),b=val('m-budgeted');if(!c||b==='')return showErr('Enter a category and a budgeted amount.');
+  else if(k==='budget'){const c=val('m-category').trim(),b=val('m-budgeted');if(!c||!finiteNum(b)||+b<0)return showErr('Enter a category and a valid budgeted amount.');
     obj={category:c,budgeted:+b,notes:val('m-notes').trim()};}
   else if(k==='actions'){const t=val('m-title').trim();if(!t)return showErr('Enter a task name.');
     obj={title:t,due:val('m-due'),status:val('m-status'),notes:val('m-notes').trim()};}
   else if(k==='sellers'){const n=val('m-name').trim();if(!n)return showErr('Enter a seller name.');const pr=val('m-price');
+    if(pr!==''&&(!finiteNum(pr)||+pr<0))return showErr('Enter a valid quoted price, or leave it blank.');
     obj={name:n,contact:val('m-contact').trim(),item:val('m-item').trim(),price:pr===''?'':+pr,status:val('m-status'),notes:val('m-notes').trim()};}
-  else if(k==='purchases'){const it=val('m-item').trim(),pr=val('m-price');if(!it||pr==='')return showErr('Enter an item name and price.');
-    obj={item:it,category:val('m-category').trim(),seller:val('m-seller').trim(),price:+pr,date:val('m-date')||todayStr(),receipt:val('m-receipt').trim(),thumb:pendingPhoto||(editing?editing.thumb:null)};
-    // upload full photo to Drive if connected
+  else if(k==='purchases'){const it=val('m-item').trim(),pr=val('m-price');if(!it||!finiteNum(pr)||+pr<0)return showErr('Enter an item name and a valid price.');
+    obj={item:it,category:val('m-category').trim(),seller:val('m-seller').trim(),price:+pr,date:val('m-date')||todayStr(),receipt:val('m-receipt').trim(),thumb:photoCleared?null:(pendingPhoto||(editing?editing.thumb:null)||null)};
     if(pendingFullPhoto&&settings.driveToken){try{const link=await uploadPhotoToDrive(pendingFullPhoto,it);if(link){obj.driveLink=link.webViewLink;obj.driveFileId=link.id;}}catch(e){toast('Drive upload failed — photo kept on device');}}
+    else if(photoCleared){obj.driveLink=null;obj.driveFileId=null;}
     else if(editing&&editing.driveLink){obj.driveLink=editing.driveLink;obj.driveFileId=editing.driveFileId;}
   }
   if(editing)Object.assign(editing,obj);else{obj.id=uid();state[k].push(obj);}
@@ -534,61 +757,87 @@ async function importCSVFile(file){const text=await file.text();const fresh=from
 const LOGIN_SCOPE='openid email profile https://www.googleapis.com/auth/drive.file';
 const G_ICON='<svg viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84A4.14 4.14 0 0 1 12 13.4v2.26h2.72c1.6-1.47 2.52-3.64 2.52-6.46z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.72-2.26c-.76.5-1.72.8-3.24.8-2.49 0-4.6-1.68-5.36-3.94H.96v2.32A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.64 10.42A5.4 5.4 0 0 1 3.36 9c0-.49.08-.97.28-1.42V5.26H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.04l2.68-2.62z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 5.26L3.64 7.58C4.4 5.32 6.51 3.58 9 3.58z"/></svg>';
 let gTokenClient=null,loggedIn=false;
-function secureContext(){return window.isSecureContext===true;}
-function clientId(){return (GOOGLE_CLIENT_ID||settings.driveClientId||'').trim();}
+function secureContext(){return window.isSecureContext===true&&location.protocol!=='file:';}
 function loadGis(){return new Promise((res,rej)=>{if(window.google&&google.accounts&&google.accounts.oauth2)return res();
   const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=res;s.onerror=()=>rej(new Error('Could not load Google script'));document.head.appendChild(s);});}
 function showLogin(opts){opts=opts||{};$('login-screen').classList.add('show');$('app').hidden=true;loggedIn=false;renderLogin(opts);}
 function hideLogin(){$('login-screen').classList.remove('show');$('app').hidden=false;loggedIn=true;}
+let lastClientId='';
+function appClientId(){
+  const inp=$('login-client-id');
+  return ((inp&&inp.value.trim())||GOOGLE_CLIENT_ID||settings.driveClientId||lastClientId||'').trim();
+}
 function renderLogin(opts){
-  opts=opts||{};const insecure=!secureContext();const cid=clientId();
+  opts=opts||{};const insecure=!secureContext();
+  const origin=location.origin;
+  const cid=appClientId();
+  const who=settings.user&&(settings.user.name||settings.user.email);
   $('login-card').innerHTML=
     '<div class="login-brand"><div class="logo"><svg viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-6h6v6"/></svg></div><h1>Site Ledger</h1></div>'+
     '<h2>Sign in to continue</h2>'+
-    '<p class="lead">Use your Google account. API keys are saved in your Drive profile, not in this website.</p>'+
-    (insecure?'<div class="set-note">Google login needs https or localhost. Host this file (GitHub Pages) or serve it locally — see SETUP.md.</div>':
-      ((cid?'':'<div class="field" style="margin-bottom:12px"><label>Google OAuth Client ID</label><input id="login-client-id" placeholder="….apps.googleusercontent.com"></div>')+
+    '<p class="lead">'+(who?'Welcome back, '+esc(who)+'. ':'')+'Sign in with Google. Your ledger and API keys stay in <b>your</b> Drive, not on this website.</p>'+
+    (insecure?'<div class="set-note">This file was opened as <b>file://</b>. Open <b>http://127.0.0.1:8765</b> instead.</div>':
+      ((cid?'':'<div class="field" style="margin-bottom:12px"><label>App OAuth Client ID (one-time setup)</label><input id="login-client-id" value="" placeholder="….apps.googleusercontent.com" autocomplete="off"></div>'+
+        '<div class="set-note" style="margin-bottom:12px">Authorised origin must be <b>'+esc(origin)+'</b>. After this is saved, other people only click Google — they never paste this ID.</div>')+
        '<button class="google-btn" id="google-login"'+(opts.busy?' disabled':'')+'>'+G_ICON+(opts.busy?'Signing in…':'Continue with Google')+'</button>'+
-       '<div class="set-note">First time: create a Web OAuth client in Google Cloud, add this site as an authorised origin, then paste the Client ID above if asked.</div>'))+
+       '<div class="set-note">Keep this tab open. Allow popups so Google opens in a small window.</div>'))+
     '<p class="error-text" id="login-error"></p>';
   const btn=$('google-login');if(btn)btn.onclick=()=>startGoogleLogin(false);
 }
 function loginErr(msg){const e=$('login-error');if(!e)return;e.textContent=msg;e.classList.add('show');}
-async function startGoogleLogin(silent){
+function startGoogleLogin(silent){
   if(!secureContext())return loginErr('Needs https or localhost.');
-  const inp=$('login-client-id');if(inp&&inp.value.trim())settings.driveClientId=inp.value.trim();
-  const cid=clientId();if(!cid)return loginErr('Paste your Google OAuth Client ID first.');
-  settings.driveClientId=cid;await saveSettings();
-  try{await loadGis();}catch(e){return loginErr(e.message||'Could not load Google.');}
-  if(!silent){const b=$('google-login');if(b){b.disabled=true;b.innerHTML=G_ICON+'Signing in…';}}
-  return new Promise(resolve=>{
-    gTokenClient=google.accounts.oauth2.initTokenClient({client_id:cid,scope:LOGIN_SCOPE,
-      callback:async resp=>{
-        if(!resp||!resp.access_token){if(!silent){renderLogin();loginErr(resp&&resp.error_description||'Sign-in cancelled.');}resolve(false);return;}
-        try{await completeLogin(resp.access_token);resolve(true);}
-        catch(e){if(!silent){renderLogin();loginErr(e.message||'Sign-in failed.');}resolve(false);}
-      },
-      error_callback:err=>{if(!silent){renderLogin();loginErr((err&&err.message)||'Sign-in cancelled.');}resolve(false);}
-    });
-    gTokenClient.requestAccessToken({prompt:silent?'':'consent'});
+  const cid=appClientId();
+  if(!cid)return loginErr('Paste the app Client ID once (from Google Cloud). Users after that only sign in with Google.');
+  lastClientId=cid;
+  if(!(window.google&&google.accounts&&google.accounts.oauth2)){
+    if(silent)return;
+    return loginErr('Google script still loading — wait a second and tap again.');
+  }
+  const b=$('google-login');if(b&&!silent){b.disabled=true;b.innerHTML=G_ICON+'Signing in…';}
+  gTokenClient=google.accounts.oauth2.initTokenClient({client_id:cid,scope:LOGIN_SCOPE,
+    callback:async resp=>{
+      if(!resp||!resp.access_token){
+        if(!silent){renderLogin();loginErr(resp&&resp.error_description||'Sign-in cancelled.');}
+        return;
+      }
+      try{settings.driveClientId=cid;await completeLogin(resp.access_token,silent);}
+      catch(e){if(!silent){renderLogin();loginErr(e.message||'Sign-in failed.');}else toast(e.message||'Could not refresh Google session');}
+    },
+    error_callback:err=>{
+      if(silent)return;
+      renderLogin();loginErr((err&&(err.message||err.type))||'Popup blocked. Allow popups for this site and try again.');
+    }
   });
+  gTokenClient.requestAccessToken({prompt:silent?'':'select_account'});
 }
-async function completeLogin(token){
+async function completeLogin(token,quiet){
   settings.driveToken=token;
   const ur=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+token}});
   if(!ur.ok)throw new Error('Could not read Google profile');
   const u=await ur.json();
-  if(settings.userSub&&settings.userSub!==u.sub){state={funds:[],budget:[],actions:[],sellers:[],purchases:[]};for(const s of ['funds','budget','actions','sellers','purchases'])await persist(s);}
+  if(settings.userSub&&settings.userSub!==u.sub){
+    state={funds:[],budget:[],actions:[],sellers:[],purchases:[]};
+    for(const s of ['funds','budget','actions','sellers','purchases'])await persist(s);
+    settings.driveFolderId='';settings.apiKey='';settings.model='';settings.apiBase='';
+  }
   settings.user={email:u.email,name:u.name,picture:u.picture};settings.userSub=u.sub;settings.autoCsv=true;
-  await saveSettings();await ensureDriveFolder();await loadProfileFromDrive();await pullCsvFromDriveIfEmpty();
-  if(settings.apiKey)try{await saveProfileToDrive();}catch(e){}
   await saveSettings();
-  hideLogin();updateUserChip();render();scheduleCsvSync();
+  hideLogin();updateUserChip();render();
+  try{
+    const existed=!!settings.driveFolderId;
+    await ensureDriveFolder();
+    await loadProfileFromDrive();
+    await saveProfileToDrive();
+    await pullCsvFromDriveIfEmpty();
+    await saveSettings();updateUserChip();render();scheduleCsvSync();
+    if(!quiet&&!existed)toast('Drive folder: My Drive → Site Ledger');
+  }catch(e){if(!quiet)toast(e.message||'Signed in, but Drive sync is not ready yet');}
 }
 async function googleLogout(){
   const tok=settings.driveToken;
   if(tok&&window.google&&google.accounts&&google.accounts.oauth2)try{google.accounts.oauth2.revoke(tok,()=>{});}catch(e){}
-  settings.apiKey='';settings.driveToken=null;settings.user=null;
+  settings.apiKey='';settings.driveToken=null;settings.user=null;settings.userSub='';
   await saveSettings();updateUserChip();showLogin();toast('Signed out');
 }
 function updateUserChip(){
@@ -598,16 +847,37 @@ function updateUserChip(){
   chip.classList.add('show');
 }
 async function driveFetch(url,opts){opts=opts||{};opts.headers=Object.assign({'Authorization':'Bearer '+settings.driveToken},opts.headers||{});
-  const r=await fetch(url,opts);if(r.status===401){settings.driveToken=null;await saveSettings();updateSyncPill();showLogin();throw new Error('Session expired — sign in again');}return r;}
+  const r=await fetch(url,opts);
+  if(r.status===401){settings.driveToken=null;throw new Error('Drive session expired — sign in again');}
+  if(!r.ok){
+    let msg='Google Drive error '+r.status;
+    try{const j=await r.json();if(j.error&&j.error.message)msg=j.error.message;}catch(e){}
+    if(r.status===403||/drive api/i.test(msg))msg='Enable the Google Drive API in your Site Ledger Google Cloud project, wait a minute, then tap Create Drive folder.';
+    throw new Error(msg);
+  }
+  return r;}
 async function ensureDriveFolder(){
-  if(settings.driveFolderId)return settings.driveFolderId;
+  if(!settings.driveToken)throw new Error('Sign in first');
+  if(settings.driveFolderId){
+    try{
+      const chk=await driveFetch('https://www.googleapis.com/drive/v3/files/'+settings.driveFolderId+'?fields=id,name,trashed');
+      const info=await chk.json();
+      if(info.id&&!info.trashed)return settings.driveFolderId;
+    }catch(e){settings.driveFolderId='';}
+  }
   const q=encodeURIComponent("name='Site Ledger' and mimeType='application/vnd.google-apps.folder' and trashed=false");
-  const r=await driveFetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,name)');
+  const r=await driveFetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,name)&spaces=drive');
   const j=await r.json();
   if(j.files&&j.files.length){settings.driveFolderId=j.files[0].id;}
-  else{const cr=await driveFetch('https://www.googleapis.com/drive/v3/files',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name:'Site Ledger',mimeType:'application/vnd.google-apps.folder'})});const cj=await cr.json();settings.driveFolderId=cj.id;}
-  await saveSettings();return settings.driveFolderId;
+  else{
+    const cr=await driveFetch('https://www.googleapis.com/drive/v3/files',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:'Site Ledger',mimeType:'application/vnd.google-apps.folder',parents:['root']})});
+    const cj=await cr.json();
+    if(!cj.id)throw new Error('Google did not create the Site Ledger folder');
+    settings.driveFolderId=cj.id;
+  }
+  await saveSettings();
+  return settings.driveFolderId;
 }
 async function findDriveFile(name){
   await ensureDriveFolder();
@@ -627,11 +897,12 @@ async function loadProfileFromDrive(){
   const r=await driveFetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media');if(!r.ok)return;
   const p=await r.json();
   if(p.provider)settings.provider=p.provider;if(p.apiKey!=null)settings.apiKey=p.apiKey;
-  if(p.model!=null)settings.model=p.model;if(p.autoCsv!=null)settings.autoCsv=p.autoCsv;
+  if(p.model!=null)settings.model=p.model;if(p.apiBase!=null)settings.apiBase=p.apiBase;
+  if(p.autoCsv!=null)settings.autoCsv=p.autoCsv;
 }
 async function saveProfileToDrive(){
   if(!settings.driveToken)return;
-  const blob=new Blob([JSON.stringify({provider:settings.provider,apiKey:settings.apiKey||'',model:settings.model||'',autoCsv:true})],{type:'application/json'});
+  const blob=new Blob([JSON.stringify({provider:settings.provider,apiKey:settings.apiKey||'',model:settings.model||'',apiBase:settings.apiBase||'',autoCsv:true})],{type:'application/json'});
   await upsertDriveFile(PROFILE_FILE,blob);
 }
 async function pullCsvFromDriveIfEmpty(){
@@ -667,30 +938,49 @@ function renderSettings(){
   $('settings-modal').innerHTML=
     '<div class="modal-head"><p class="modal-title">Settings</p><button class="modal-close" id="set-close">&times;</button></div>'+
     '<div class="set-section"><h3>Google account</h3><p class="hint">'+(who?'Signed in as <b>'+esc(who)+'</b>.':'Not signed in.')+'</p>'+
-    '<div class="set-row"><button class="set-btn accent" id="drive-syncnow">Sync now</button><button class="set-btn" id="google-logout">Sign out</button></div>'+
-    '<div class="set-note">Your AI keys live in <b>Site Ledger / site-ledger-settings.json</b> in your Google Drive. Ledger backup is site-ledger.csv. Photos go in the same folder.</div></div>'+
-    '<div class="set-section"><h3>AI receipt scanning</h3><p class="hint">Saved to your Google profile, then loaded on any device when you sign in.</p>'+
-    '<div class="field" style="margin-bottom:10px"><label>Provider</label><select id="set-provider">'+
-      '<option value="openai"'+(settings.provider==='openai'?' selected':'')+'>OpenAI (gpt-4o)</option>'+
-      '<option value="qwen"'+(settings.provider==='qwen'?' selected':'')+'>Qwen-VL (DashScope)</option>'+
-      '<option value="deepseek"'+(settings.provider==='deepseek'?' selected':'')+'>DeepSeek-VL</option></select></div>'+
-    '<div class="field" style="margin-bottom:10px"><label>API key</label><input id="set-key" type="password" value="'+esc(settings.apiKey)+'" placeholder="sk-…"></div>'+
-    '<div class="field"><label>Model (optional override)</label><input id="set-model" value="'+esc(settings.model)+'" placeholder="default per provider"></div>'+
-    '<div class="set-note">The key is stored in your Drive, not in this website. Receipt scanning still sends it from this browser to your AI provider.</div></div>'+
+    '<div class="set-row"><button class="set-btn accent" id="drive-syncnow">Sync now</button>'+
+    '<button class="set-btn" id="drive-create">Create Drive folder</button>'+
+    (settings.driveFolderId?'<a class="set-btn" id="drive-open" href="https://drive.google.com/drive/folders/'+esc(settings.driveFolderId)+'" target="_blank" rel="noopener">Open Drive folder</a>':'')+
+    '<button class="set-btn" id="google-logout">Sign out</button></div>'+
+    '<div class="set-note">Look in the same Google account you signed in with: <b>drive.google.com → My Drive → Site Ledger</b> (not “side ledger”). If it is missing, enable <b>Google Drive API</b> in that Cloud project, then tap Create Drive folder.</div></div>'+
+    '<div class="set-section"><h3>AI receipt scanning</h3><p class="hint">Paste your own key for OpenAI, Qwen, DeepSeek, or any OpenAI-compatible API. Saved to your Drive, then loaded on any device when you sign in.</p>'+
+    '<div class="field" style="margin-bottom:10px"><label>Provider</label><select id="set-provider">'+providerOptionsHtml()+'</select></div>'+
+    '<div id="set-custom" style="display:none">'+
+    '<div class="field" style="margin-bottom:10px"><label class="req">API base URL</label><input id="set-base" value="'+esc(settings.apiBase)+'" placeholder="https://api.example.com/v1" autocomplete="off">'+
+    '<p class="field-hint">Works with Groq, OpenRouter, Ollama, LM Studio, vLLM, and similar. Use the /v1 root or the full /v1/chat/completions URL.</p></div></div>'+
+    '<div class="field" style="margin-bottom:10px"><label>API key</label><input id="set-key" type="password" value="'+esc(settings.apiKey)+'" placeholder="sk-… or your provider key" autocomplete="off"></div>'+
+    modelPickerHtml('set')+
+    '<div class="set-note">Add your key, tap Load to browse models, then Save settings. The key never goes into GitHub.</div></div>'+
     '<div class="set-section"><h3>Manual backup (CSV)</h3><p class="hint">Export a local copy, or import to replace current data.</p>'+
     '<div class="set-row"><button class="set-btn" id="csv-export">Export CSV</button>'+
     '<button class="set-btn" id="csv-import">Import CSV</button>'+
     '<input type="file" accept=".csv,text/csv" id="csv-file" style="display:none"></div></div>'+
     '<div class="modal-actions"><button class="btn-primary" id="set-save">Save settings</button></div>';
   $('set-close').onclick=()=>$('settings-overlay').classList.remove('show');
-  $('set-save').onclick=async()=>{settings.provider=$('set-provider').value;settings.apiKey=$('set-key').value.trim();
-    settings.model=$('set-model').value.trim();await saveSettings();
+  wireModelPicker('set','set-custom');
+  $('set-save').onclick=async()=>{
+    settings.provider=$('set-provider').value;settings.apiKey=$('set-key').value.trim();
+    settings.model=readModelValue('set');
+    const baseEl=$('set-base');if(baseEl)settings.apiBase=baseEl.value.trim();
+    if(settings.provider==='custom'){
+      if(!settings.apiBase){toast('Enter the custom API base URL');return;}
+      if(!settings.model){toast('Choose a model, or tap Other to type one');return;}
+      try{chatCompletionsUrl(settings.apiBase);}catch(e){toast(e.message);return;}
+    }
+    await saveSettings();
     try{await saveProfileToDrive();toast('Saved to your Google profile');}catch(e){toast(e.message||'Saved on this device only');}
-    updateSyncPill();$('settings-overlay').classList.remove('show');};
+    updateSyncPill();$('settings-overlay').classList.remove('show');
+  };
   $('csv-export').onclick=downloadCSV;
   $('csv-import').onclick=()=>$('csv-file').click();
   $('csv-file').onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)importCSVFile(f);};
   const ds=$('drive-syncnow');if(ds)ds.onclick=syncCsvToDrive;
+  const mk=$('drive-create');if(mk)mk.onclick=async()=>{
+    try{
+      await ensureDriveFolder();await saveProfileToDrive();await saveSettings();
+      toast('Folder ready: My Drive → Site Ledger');renderSettings();
+    }catch(e){toast(e.message||'Could not create Drive folder');}
+  };
   const lo=$('google-logout');if(lo)lo.onclick=googleLogout;
 }
 
@@ -699,9 +989,13 @@ function renderSettings(){
   renderLogin();
   try{
     await openDB();await loadAll();
-    settings.driveToken=null;settings.user=null;
-    if(GOOGLE_CLIENT_ID)settings.driveClientId=GOOGLE_CLIENT_ID;
-    if(secureContext()&&clientId()){renderLogin({busy:true});const ok=await startGoogleLogin(true);if(ok)return;}
+    lastClientId=GOOGLE_CLIENT_ID||settings.driveClientId||'';
+    await loadGis();
+    if(settings.user&&appClientId()){
+      hideLogin();updateUserChip();render();
+      startGoogleLogin(true);
+      return;
+    }
   }catch(e){console.error(e);}
   renderLogin();
 })();
