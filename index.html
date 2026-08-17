@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F7F7F5">
+<title>Site Ledger</title>
+<style>
+:root{
+  --bg:#F7F7F5;--surface:#FFFFFF;--surface-2:#F2F2EF;
+  --ink:#1A1A1A;--ink-2:#6B6B6B;--ink-3:#9A9A97;
+  --accent:#2F6E4F;--accent-soft:#E7F0EB;
+  --loan:#B5842A;--loan-soft:#F6EEDC;
+  --spend:#C4553A;--spend-soft:#F8E9E4;
+  --line:#E7E7E3;--line-2:#DADAD5;
+  --radius:14px;--radius-sm:10px;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);
+  -webkit-font-smoothing:antialiased;line-height:1.5;padding-bottom:calc(72px + var(--safe-bottom));}
+.container{max-width:900px;margin:0 auto;padding:0 16px;}
+.header{padding:calc(20px + var(--safe-top)) 0 12px;display:flex;justify-content:space-between;align-items:center;}
+.brand{display:flex;align-items:center;gap:10px;}
+.logo{width:30px;height:30px;border-radius:8px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.logo svg{width:17px;height:17px;stroke:#fff;fill:none;stroke-width:1.8;}
+h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
+.settings-btn{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px;cursor:pointer;color:var(--ink-2);display:flex;}
+.settings-btn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;}
+.settings-btn:hover{color:var(--ink);}
+.sync-pill{font-size:11px;color:var(--ink-3);margin:0 0 14px;display:flex;align-items:center;gap:6px;}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--ink-3);}
+.sync-dot.on{background:var(--accent);}
+.summary{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:16px;}
+.avail-block{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+.avail-label{font-size:12px;color:var(--ink-2);margin:0 0 5px;font-weight:500;}
+.avail-value{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:33px;font-weight:600;margin:0;letter-spacing:-.02em;line-height:1;}
+.avail-value.negative{color:var(--spend);}
+.avail-hint{font-size:11.5px;color:var(--ink-3);text-align:right;max-width:190px;}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.stat-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+.stat-label{font-size:11.5px;color:var(--ink-2);margin:0 0 4px;font-weight:500;}
+.stat-value{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:16px;font-weight:600;margin:0;}
+.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin-bottom:16px;padding:4px;background:var(--surface-2);border-radius:12px;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab-btn{font-family:inherit;font-weight:500;font-size:13px;background:transparent;border:none;border-radius:9px;padding:9px 14px;cursor:pointer;color:var(--ink-2);white-space:nowrap;flex-shrink:0;transition:.15s;}
+.tab-btn.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06);}
+.panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:12px;flex-wrap:wrap;}
+.panel-title{font-size:16px;font-weight:600;margin:0;}
+.panel-desc{font-size:12.5px;color:var(--ink-2);margin:3px 0 0;max-width:56ch;}
+.add-btn{font-family:inherit;font-weight:500;font-size:13.5px;background:var(--ink);color:#fff;border:none;border-radius:10px;padding:10px 15px;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;}
+.add-btn svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2;}
+.entry-list{display:flex;flex-direction:column;gap:9px;}
+.entry{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:15px;}
+.entry-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+.entry-name{font-weight:550;font-size:15px;margin:0;}
+.entry-sub{font-size:12.5px;color:var(--ink-2);margin:3px 0 0;}
+.entry-amount{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-weight:600;font-size:15px;white-space:nowrap;}
+.entry-meta{display:flex;flex-wrap:wrap;gap:7px 14px;margin-top:11px;font-size:12px;color:var(--ink-2);align-items:center;}
+.meta-item strong{color:var(--ink);font-weight:600;}
+.entry-actions{display:flex;gap:6px;margin-top:13px;flex-wrap:wrap;}
+.icon-btn{font-family:inherit;font-size:12.5px;font-weight:500;background:transparent;border:1px solid var(--line-2);cursor:pointer;color:var(--ink-2);padding:6px 12px;border-radius:8px;transition:.12s;}
+.icon-btn:hover{background:var(--surface-2);color:var(--ink);}
+.icon-btn.danger:hover{background:var(--spend-soft);color:var(--spend);border-color:var(--spend);}
+.icon-btn.good{color:var(--accent);border-color:#BCD8C8;}
+.thumb{width:48px;height:48px;border-radius:8px;object-fit:cover;border:1px solid var(--line-2);cursor:pointer;flex-shrink:0;}
+.chip{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;}
+.chip.pending{color:var(--spend);background:var(--spend-soft);}
+.chip.progress{color:#2D5A8A;background:#E5EEF7;}
+.chip.done{color:var(--accent);background:var(--accent-soft);}
+.tag{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:var(--ink-2);background:var(--surface-2);padding:2px 8px;border-radius:6px;}
+.bar{height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden;margin-top:11px;}
+.bar span{display:block;height:100%;background:var(--accent);border-radius:3px;}
+.bar span.over{background:var(--spend);}
+.empty-state{text-align:center;padding:44px 16px;color:var(--ink-2);}
+.empty-state .big{font-size:14.5px;color:var(--ink);margin-bottom:5px;font-weight:550;}
+.empty-state .small{font-size:13px;}
+.loading{text-align:center;padding:48px;color:var(--ink-3);font-size:13px;}
+.overlay{display:none;min-height:100vh;background:rgba(26,26,26,.42);align-items:flex-start;justify-content:center;padding:calc(28px + var(--safe-top)) 16px 28px;position:fixed;inset:0;z-index:40;overflow-y:auto;}
+.overlay.show{display:flex;}
+.modal{background:var(--surface);border-radius:var(--radius);width:100%;max-width:540px;padding:22px;box-shadow:0 12px 40px rgba(0,0,0,.16);margin:auto 0;}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+.modal-title{font-size:16px;font-weight:600;margin:0;}
+.modal-close{background:none;border:none;cursor:pointer;color:var(--ink-2);padding:4px;border-radius:6px;font-size:20px;line-height:1;}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:13px;}
+.field label{display:block;font-size:12px;font-weight:500;color:var(--ink-2);margin-bottom:6px;}
+.field input,.field select{width:100%;font-family:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);color:var(--ink);}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent);}
+.field.wide{grid-column:1/-1;}
+.photo-field{grid-column:1/-1;}
+.ocr-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:inherit;font-weight:550;font-size:14px;background:var(--accent-soft);color:var(--accent);border:1px solid #BCD8C8;border-radius:9px;padding:12px 16px;cursor:pointer;width:100%;}
+.ocr-btn:disabled{opacity:.55;cursor:default;}
+.ocr-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.photo-btn{display:inline-flex;align-items:center;gap:8px;font-family:inherit;font-weight:500;font-size:14px;background:var(--surface-2);color:var(--ink);border:1px dashed var(--line-2);border-radius:9px;padding:11px 16px;cursor:pointer;width:100%;justify-content:center;margin-top:9px;}
+.photo-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.photo-preview{margin-top:11px;display:none;align-items:flex-start;gap:12px;}
+.photo-preview.show{display:flex;}
+.photo-preview img{width:90px;height:90px;object-fit:cover;border-radius:9px;border:1px solid var(--line-2);}
+.photo-remove{font-size:12.5px;color:var(--spend);background:none;border:none;cursor:pointer;padding:4px 0;font-weight:500;}
+.ocr-status{font-size:12.5px;color:var(--ink-2);margin-top:9px;display:none;}
+.ocr-status.show{display:block;}
+.ocr-status.err{color:var(--spend);}
+.error-text{color:var(--spend);font-size:13px;margin:12px 0 0;display:none;font-weight:500;}
+.error-text.show{display:block;}
+.modal-actions{margin-top:20px;display:flex;gap:9px;}
+.btn-primary{flex:1;font-family:inherit;font-weight:550;font-size:14.5px;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px;cursor:pointer;}
+.btn-cancel{font-family:inherit;font-weight:500;font-size:14.5px;background:transparent;color:var(--ink-2);border:1px solid var(--line-2);border-radius:10px;padding:12px 20px;cursor:pointer;}
+.set-section{margin-bottom:22px;}
+.set-section h3{font-size:13px;font-weight:600;margin:0 0 4px;}
+.set-section p.hint{font-size:12px;color:var(--ink-2);margin:0 0 12px;}
+.set-row{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:10px;}
+.set-btn{font-family:inherit;font-size:13px;font-weight:500;background:var(--surface-2);border:1px solid var(--line-2);border-radius:9px;padding:10px 14px;cursor:pointer;color:var(--ink);}
+.set-btn.accent{background:var(--accent);color:#fff;border-color:var(--accent);}
+.set-note{font-size:11.5px;color:var(--ink-3);background:var(--surface-2);border-radius:8px;padding:10px 12px;margin-top:8px;line-height:1.5;}
+.lightbox{display:none;min-height:100vh;background:rgba(20,20,20,.9);align-items:center;justify-content:center;padding:24px;position:fixed;inset:0;z-index:60;}
+.lightbox.show{display:flex;}
+.lightbox img{max-width:100%;max-height:82vh;border-radius:12px;}
+.lightbox-close{position:absolute;top:18px;right:22px;font-size:30px;color:#fff;background:none;border:none;cursor:pointer;}
+.toast{position:fixed;bottom:calc(20px + var(--safe-bottom));left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:13px;padding:11px 18px;border-radius:10px;z-index:80;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center;}
+.toast.show{opacity:1;}
+@media (max-width:560px){
+  .avail-value{font-size:28px;}
+  .stat-grid{grid-template-columns:repeat(2,1fr);gap:14px 12px;}
+  .avail-hint{display:none;}
+  .modal{padding:18px;}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-6h6v6"/></svg></div>
+      <h1>Site Ledger</h1>
+    </div>
+    <button class="settings-btn" id="open-settings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  </div>
+  <p class="sync-pill" id="sync-pill"><span class="sync-dot" id="sync-dot"></span><span id="sync-text">Local only</span></p>
+
+  <div class="summary">
+    <div class="avail-block">
+      <div><p class="avail-label">Available funds now</p><p class="avail-value" id="avail-value">—</p></div>
+      <p class="avail-hint">Loan received + own cash − everything spent</p>
+    </div>
+    <div class="stat-grid">
+      <div><p class="stat-label"><span class="stat-dot" style="background:var(--loan)"></span>Loan received</p><p class="stat-value" id="stat-loan" style="color:var(--loan)">—</p></div>
+      <div><p class="stat-label"><span class="stat-dot" style="background:var(--ink-2)"></span>Own cash</p><p class="stat-value" id="stat-cash">—</p></div>
+      <div><p class="stat-label"><span class="stat-dot" style="background:var(--spend)"></span>Spent</p><p class="stat-value" id="stat-spent" style="color:var(--spend)">—</p></div>
+      <div><p class="stat-label"><span class="stat-dot" style="background:var(--accent)"></span>Pending</p><p class="stat-value" id="stat-pending">—</p></div>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="funds">Funds</button>
+    <button class="tab-btn" data-tab="budget">Budget</button>
+    <button class="tab-btn" data-tab="actions">Actions</button>
+    <button class="tab-btn" data-tab="sellers">Sellers</button>
+    <button class="tab-btn" data-tab="purchases">Purchases</button>
+  </div>
+  <div id="panel-root"><div class="loading">Loading your ledger…</div></div>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+<div class="overlay" id="settings-overlay"><div class="modal" id="settings-modal"></div></div>
+<div class="lightbox" id="lightbox"><button class="lightbox-close" id="lightbox-close">&times;</button><img id="lightbox-img" src="" alt="Receipt"></div>
+<div class="toast" id="toast"></div>
+
+<datalist id="category-options">
+  <option value="Foundation"><option value="Structure / Masonry"><option value="Roofing">
+  <option value="Electrical"><option value="Plumbing"><option value="Tiles / Flooring">
+  <option value="Doors / Windows"><option value="Paint / Finishing"><option value="Kitchen">
+  <option value="Bathroom"><option value="Labour"><option value="Permits / Fees"><option value="Other">
+</datalist>
+
+<script>
+/* ============ Site Ledger — local-first PWA ============ */
+const CUR='Rs ';
+const money=n=>CUR+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+const todayStr=()=>new Date().toISOString().slice(0,10);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $=id=>document.getElementById(id);
+
+/* ---- IndexedDB tiny wrapper ---- */
+const DB_NAME='siteledger',STORES=['funds','budget','actions','sellers','purchases','meta'];
+let db;
+function openDB(){return new Promise((res,rej)=>{
+  const req=indexedDB.open(DB_NAME,1);
+  req.onupgradeneeded=e=>{const d=e.target.result;STORES.forEach(s=>{if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:s==='meta'?'k':'id'});});};
+  req.onsuccess=e=>{db=e.target.result;res();};
+  req.onerror=e=>rej(e.target.error);
+});}
+function tx(store,mode){return db.transaction(store,mode).objectStore(store);}
+function idbAll(store){return new Promise((res,rej)=>{const r=tx(store,'readonly').getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error);});}
+function idbPut(store,val){return new Promise((res,rej)=>{const r=tx(store,'readwrite').put(val);r.onsuccess=()=>res();r.onerror=()=>rej(r.error);});}
+function idbDel(store,id){return new Promise((res,rej)=>{const r=tx(store,'readwrite').delete(id);r.onsuccess=()=>res();r.onerror=()=>rej(r.error);});}
+function idbGetMeta(k){return new Promise((res)=>{const r=tx('meta','readonly').get(k);r.onsuccess=()=>res(r.result?r.result.v:null);r.onerror=()=>res(null);});}
+function idbSetMeta(k,v){return idbPut('meta',{k,v});}
+
+let state={funds:[],budget:[],actions:[],sellers:[],purchases:[]};
+let settings={provider:'openai',apiKey:'',model:'',driveClientId:'',driveToken:null,driveFolderId:''};
+let activeTab='funds',editing=null,editKind=null,pendingPhoto=null,pendingFullPhoto=null;
+
+async function loadAll(){for(const s of ['funds','budget','actions','sellers','purchases'])state[s]=await idbAll(s);
+  const st=await idbGetMeta('settings');if(st)settings=Object.assign(settings,st);}
+async function persist(store){
+  // wipe+rewrite that store (simple + safe for small data)
+  await new Promise((res,rej)=>{const r=tx(store,'readwrite').clear();r.onsuccess=()=>res();r.onerror=()=>rej(r.error);});
+  for(const row of state[store])await idbPut(store,row);
+}
+async function saveSettings(){await idbSetMeta('settings',settings);}
+
+/* ---- calcs ---- */
+const loanReceived=()=>state.funds.filter(f=>f.type==='loan').reduce((s,f)=>s+(+f.amount||0),0);
+const ownCash=()=>state.funds.filter(f=>f.type==='cash').reduce((s,f)=>s+(+f.amount||0),0);
+const totalSpent=()=>state.purchases.reduce((s,p)=>s+(+p.price||0),0);
+const spentForCat=c=>state.purchases.filter(p=>(p.category||'').toLowerCase()===String(c||'').toLowerCase()).reduce((s,p)=>s+(+p.price||0),0);
+function computeSummary(){
+  const loan=loanReceived(),cash=ownCash(),spent=totalSpent(),avail=loan+cash-spent;
+  const av=$('avail-value');av.textContent=money(avail);av.classList.toggle('negative',avail<0);
+  $('stat-loan').textContent=money(loan);$('stat-cash').textContent=money(cash);
+  $('stat-spent').textContent=money(spent);$('stat-pending').textContent=state.actions.filter(a=>a.status!=='done').length;
+}
+const CHIP={pending:['pending','Pending'],progress:['progress','In progress'],done:['done','Done'],shortlisted:['pending','Shortlisted'],contacted:['progress','Contacted'],selected:['done','Selected'],rejected:['pending','Rejected']};
+const chip=s=>{const m=CHIP[s]||['pending',s||'—'];return '<span class="chip '+m[0]+'">'+m[1]+'</span>';};
+
+/* ---- tabs ---- */
+$('tabs').addEventListener('click',e=>{const b=e.target.closest('.tab-btn');if(!b)return;
+  activeTab=b.dataset.tab;document.querySelectorAll('.tab-btn').forEach(x=>x.classList.toggle('active',x.dataset.tab===activeTab));render();});
+
+function render(){computeSummary();
+  $('panel-root').innerHTML=({funds:renderFunds,budget:renderBudget,actions:renderActions,sellers:renderSellers,purchases:renderPurchases}[activeTab])();
+  attach();updateSyncPill();}
+
+function head(title,desc,kind){return '<div class="panel-head"><div><p class="panel-title">'+title+'</p><p class="panel-desc">'+desc+'</p></div>'+
+  '<button class="add-btn" data-add="'+kind+'"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add</button></div>';}
+function empty(b,s){return '<div class="empty-state"><p class="big">'+b+'</p><p class="small">'+s+'</p></div>';}
+
+function renderFunds(){
+  const sorted=[...state.funds].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const items=sorted.map(f=>'<div class="entry"><div class="entry-top"><div>'+
+    '<p class="entry-name">'+esc(f.label||(f.type==='loan'?'Loan tranche':'Own cash'))+'</p>'+
+    '<p class="entry-sub">'+(f.type==='loan'?'<span class="tag">Loan phase</span>':'<span class="tag">Own cash</span>')+' &nbsp;'+esc(f.date||'')+'</p></div>'+
+    '<span class="entry-amount" style="color:'+(f.type==='loan'?'var(--loan)':'var(--ink)')+'">+'+money(f.amount)+'</span></div>'+
+    (f.notes?'<div class="entry-meta"><span class="meta-item">'+esc(f.notes)+'</span></div>':'')+
+    '<div class="entry-actions"><button class="icon-btn" data-edit="funds" data-id="'+f.id+'">Edit</button>'+
+    '<button class="icon-btn danger" data-del="funds" data-id="'+f.id+'">Delete</button></div></div>').join('');
+  return head('Funds','Log each loan tranche as it lands, plus any own cash. Spending is deducted automatically.','funds')+
+    (state.funds.length?'<div class="entry-list">'+items+'</div>':empty('No funds recorded yet','Add your first loan phase or own-cash contribution.'));
+}
+function renderBudget(){
+  const items=state.budget.map(b=>{const spent=spentForCat(b.category),bud=+b.budgeted||0,remain=bud-spent,w=bud>0?Math.min(100,spent/bud*100):0;
+    return '<div class="entry"><div class="entry-top"><div><p class="entry-name">'+esc(b.category)+'</p>'+
+      (b.notes?'<p class="entry-sub">'+esc(b.notes)+'</p>':'')+'</div><span class="entry-amount">'+money(bud)+'</span></div>'+
+      '<div class="entry-meta"><span class="meta-item">Spent <strong>'+money(spent)+'</strong></span>'+
+      '<span class="meta-item">Remaining <strong style="color:'+(remain<0?'var(--spend)':'var(--accent)')+'">'+money(remain)+'</strong></span></div>'+
+      '<div class="bar"><span class="'+(spent>bud?'over':'')+'" style="width:'+w+'%"></span></div>'+
+      '<div class="entry-actions"><button class="icon-btn" data-edit="budget" data-id="'+b.id+'">Edit</button>'+
+      '<button class="icon-btn danger" data-del="budget" data-id="'+b.id+'">Delete</button></div></div>';}).join('');
+  return head('Budget by category','Plan what each part should cost. Actual spend fills in from purchases.','budget')+
+    (state.budget.length?'<div class="entry-list">'+items+'</div>':empty('No budget categories yet','Add a category like "Roofing" with a planned amount.'));
+}
+function renderActions(){
+  const sorted=[...state.actions].sort((a,b)=>{if(a.status==='done'&&b.status!=='done')return 1;if(a.status!=='done'&&b.status==='done')return -1;return (a.due||'').localeCompare(b.due||'');});
+  const items=sorted.map(a=>'<div class="entry"><div class="entry-top"><div><p class="entry-name">'+esc(a.title)+'</p>'+
+    (a.notes?'<p class="entry-sub">'+esc(a.notes)+'</p>':'')+'</div>'+chip(a.status)+'</div>'+
+    (a.due?'<div class="entry-meta"><span class="meta-item">Due <strong>'+esc(a.due)+'</strong></span></div>':'')+
+    '<div class="entry-actions">'+(a.status!=='done'?'<button class="icon-btn good" data-done="'+a.id+'">Mark done</button>':'')+
+    '<button class="icon-btn" data-edit="actions" data-id="'+a.id+'">Edit</button>'+
+    '<button class="icon-btn danger" data-del="actions" data-id="'+a.id+'">Delete</button></div></div>').join('');
+  return head('Pending actions','What still needs doing, and when.','actions')+
+    (state.actions.length?'<div class="entry-list">'+items+'</div>':empty('No actions yet','Add things like "Get quote for tiles".'));
+}
+function renderSellers(){
+  const items=state.sellers.map(s=>'<div class="entry"><div class="entry-top"><div><p class="entry-name">'+esc(s.name)+'</p>'+
+    (s.contact?'<p class="entry-sub">'+esc(s.contact)+'</p>':'')+'</div>'+chip(s.status)+'</div>'+
+    '<div class="entry-meta">'+(s.item?'<span class="meta-item">'+esc(s.item)+'</span>':'')+
+    ((s.price!==''&&s.price!=null)?'<span class="meta-item">Quoted <strong>'+money(s.price)+'</strong></span>':'')+
+    (s.notes?'<span class="meta-item">'+esc(s.notes)+'</span>':'')+'</div>'+
+    '<div class="entry-actions"><button class="icon-btn" data-edit="sellers" data-id="'+s.id+'">Edit</button>'+
+    '<button class="icon-btn danger" data-del="sellers" data-id="'+s.id+'">Delete</button></div></div>').join('');
+  return head('Seller shortlist','Compare suppliers and contractors you\'re considering.','sellers')+
+    (state.sellers.length?'<div class="entry-list">'+items+'</div>':empty('No sellers shortlisted yet','Add suppliers with their quoted price and status.'));
+}
+function renderPurchases(){
+  const sorted=[...state.purchases].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const items=sorted.map(p=>'<div class="entry"><div class="entry-top" style="gap:12px">'+
+    (p.thumb?'<img src="'+p.thumb+'" class="thumb" data-lightbox="'+p.id+'" alt="Receipt">':'')+
+    '<div style="flex:1"><p class="entry-name">'+esc(p.item)+'</p>'+
+    '<p class="entry-sub">'+(p.seller?esc(p.seller):'')+((p.seller&&p.date)?' · ':'')+(p.date?esc(p.date):'')+'</p></div>'+
+    '<span class="entry-amount">'+money(p.price)+'</span></div>'+
+    '<div class="entry-meta">'+(p.category?'<span class="tag">'+esc(p.category)+'</span>':'')+
+    (p.receipt?'<span class="meta-item">Receipt <strong>'+esc(p.receipt)+'</strong></span>':'')+
+    (p.driveLink?'<span class="meta-item" style="color:var(--accent)">On Drive</span>':(p.thumb?'<span class="meta-item">Photo</span>':''))+'</div>'+
+    '<div class="entry-actions"><button class="icon-btn" data-edit="purchases" data-id="'+p.id+'">Edit</button>'+
+    '<button class="icon-btn danger" data-del="purchases" data-id="'+p.id+'">Delete</button></div></div>').join('');
+  return head('Purchases &amp; receipts','Snap a receipt and let AI fill the details. Each purchase reduces available funds.','purchases')+
+    (state.purchases.length?'<div class="entry-list">'+items+'</div>':empty('No purchases logged yet','Add an item, or scan a receipt to auto-fill.'));
+}
+
+/* ---- modal ---- */
+const TITLES={funds:'funds entry',budget:'budget category',actions:'action',sellers:'seller',purchases:'purchase'};
+function openModal(kind,rec){
+  editKind=kind;editing=rec||null;
+  pendingPhoto=(kind==='purchases'&&rec)?(rec.thumb||null):null;
+  pendingFullPhoto=null;
+  $('modal').innerHTML='<div class="modal-head"><p class="modal-title">'+(rec?'Edit ':'Add ')+TITLES[kind]+'</p>'+
+    '<button class="modal-close" id="modal-close">&times;</button></div>'+formBody(kind,rec)+
+    '<p class="error-text" id="modal-error"></p>'+
+    '<div class="modal-actions"><button class="btn-primary" id="modal-save">Save</button>'+
+    '<button class="btn-cancel" id="modal-cancel">Cancel</button></div>';
+  $('overlay').classList.add('show');bindModal();
+}
+function closeModal(){$('overlay').classList.remove('show');editing=null;editKind=null;pendingPhoto=null;pendingFullPhoto=null;}
+function formBody(kind,p){
+  if(kind==='funds'){p=p||{type:'loan',label:'',amount:'',date:todayStr(),notes:''};
+    return '<div class="form-grid">'+
+      '<div class="field"><label>Type</label><select id="m-type"><option value="loan"'+(p.type==='loan'?' selected':'')+'>Loan phase</option><option value="cash"'+(p.type==='cash'?' selected':'')+'>Own cash</option></select></div>'+
+      '<div class="field"><label>Label</label><input id="m-label" value="'+esc(p.label)+'" placeholder="e.g. Loan phase 1"></div>'+
+      '<div class="field"><label>Amount</label><input type="number" inputmode="decimal" id="m-amount" value="'+esc(p.amount)+'" placeholder="0"></div>'+
+      '<div class="field"><label>Date received</label><input type="date" id="m-date" value="'+esc(p.date)+'"></div>'+
+      '<div class="field wide"><label>Notes</label><input id="m-notes" value="'+esc(p.notes)+'" placeholder="Optional"></div></div>';}
+  if(kind==='budget'){p=p||{category:'',budgeted:'',notes:''};
+    return '<div class="form-grid">'+
+      '<div class="field"><label>Category</label><input list="category-options" id="m-category" value="'+esc(p.category)+'" placeholder="e.g. Roofing"></div>'+
+      '<div class="field"><label>Budgeted amount</label><input type="number" inputmode="decimal" id="m-budgeted" value="'+esc(p.budgeted)+'" placeholder="0"></div>'+
+      '<div class="field wide"><label>Notes</label><input id="m-notes" value="'+esc(p.notes)+'" placeholder="Optional"></div></div>';}
+  if(kind==='actions'){p=p||{title:'',due:'',status:'pending',notes:''};
+    return '<div class="form-grid">'+
+      '<div class="field wide"><label>Task</label><input id="m-title" value="'+esc(p.title)+'" placeholder="e.g. Get quote for tiles"></div>'+
+      '<div class="field"><label>Due date</label><input type="date" id="m-due" value="'+esc(p.due)+'"></div>'+
+      '<div class="field"><label>Status</label><select id="m-status">'+
+      '<option value="pending"'+(p.status==='pending'?' selected':'')+'>Pending</option>'+
+      '<option value="progress"'+(p.status==='progress'?' selected':'')+'>In progress</option>'+
+      '<option value="done"'+(p.status==='done'?' selected':'')+'>Done</option></select></div>'+
+      '<div class="field wide"><label>Notes</label><input id="m-notes" value="'+esc(p.notes)+'" placeholder="Optional"></div></div>';}
+  if(kind==='sellers'){p=p||{name:'',contact:'',item:'',price:'',status:'shortlisted',notes:''};
+    return '<div class="form-grid">'+
+      '<div class="field"><label>Seller name</label><input id="m-name" value="'+esc(p.name)+'" placeholder="e.g. ABC Hardware"></div>'+
+      '<div class="field"><label>Contact</label><input id="m-contact" value="'+esc(p.contact)+'" placeholder="Phone / email"></div>'+
+      '<div class="field"><label>Item / service</label><input list="category-options" id="m-item" value="'+esc(p.item)+'" placeholder="e.g. Roof tiles"></div>'+
+      '<div class="field"><label>Quoted price</label><input type="number" inputmode="decimal" id="m-price" value="'+esc(p.price)+'" placeholder="0"></div>'+
+      '<div class="field"><label>Status</label><select id="m-status">'+
+      '<option value="shortlisted"'+(p.status==='shortlisted'?' selected':'')+'>Shortlisted</option>'+
+      '<option value="contacted"'+(p.status==='contacted'?' selected':'')+'>Contacted</option>'+
+      '<option value="selected"'+(p.status==='selected'?' selected':'')+'>Selected</option>'+
+      '<option value="rejected"'+(p.status==='rejected'?' selected':'')+'>Rejected</option></select></div>'+
+      '<div class="field wide"><label>Notes</label><input id="m-notes" value="'+esc(p.notes)+'" placeholder="Optional"></div></div>';}
+  if(kind==='purchases'){p=p||{item:'',category:'',seller:'',price:'',date:todayStr(),receipt:'',thumb:null};
+    const cur=pendingPhoto;
+    return '<div class="photo-field" style="margin-bottom:14px">'+
+      '<button type="button" class="ocr-btn" id="m-ocr"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>Scan receipt with AI</button>'+
+      '<label class="photo-btn"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Attach photo only'+
+      '<input type="file" accept="image/*" capture="environment" id="m-photo" style="display:none"></label>'+
+      '<div class="ocr-status" id="m-ocr-status"></div>'+
+      '<div class="photo-preview '+(cur?'show':'')+'" id="m-photo-preview"><img id="m-photo-img" src="'+(cur||'')+'" alt="Receipt">'+
+      '<button type="button" class="photo-remove" id="m-photo-remove">Remove photo</button></div></div>'+
+      '<div class="form-grid">'+
+      '<div class="field"><label>Item</label><input id="m-item" value="'+esc(p.item)+'" placeholder="e.g. 50 bags cement"></div>'+
+      '<div class="field"><label>Category</label><input list="category-options" id="m-category" value="'+esc(p.category)+'" placeholder="e.g. Foundation"></div>'+
+      '<div class="field"><label>Seller</label><input id="m-seller" value="'+esc(p.seller)+'" placeholder="Who you bought from"></div>'+
+      '<div class="field"><label>Price paid</label><input type="number" inputmode="decimal" id="m-price" value="'+esc(p.price)+'" placeholder="0"></div>'+
+      '<div class="field"><label>Date</label><input type="date" id="m-date" value="'+esc(p.date)+'"></div>'+
+      '<div class="field"><label>Receipt ref</label><input id="m-receipt" value="'+esc(p.receipt)+'" placeholder="Receipt no. (optional)"></div></div>';}
+  return '';
+}
+function bindModal(){
+  $('modal-close').onclick=closeModal;$('modal-cancel').onclick=closeModal;$('modal-save').onclick=saveModal;
+  const pin=$('m-photo');
+  if(pin)pin.addEventListener('change',async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;await handlePhoto(f);});
+  const prm=$('m-photo-remove');
+  if(prm)prm.onclick=()=>{pendingPhoto=null;pendingFullPhoto=null;const pv=$('m-photo-preview');if(pv)pv.classList.remove('show');const pi=$('m-photo');if(pi)pi.value='';};
+  const ocr=$('m-ocr');
+  if(ocr)ocr.onclick=()=>{
+    if(!settings.apiKey){ocrStatus('Add your AI API key in Settings first.',true);return;}
+    let inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.capture='environment';
+    inp.onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;await handlePhoto(f);await runOCR();};
+    inp.click();
+  };
+}
+async function handlePhoto(file){
+  pendingFullPhoto=await compressImage(file,1600,0.7);   // full-res for Drive/OCR
+  pendingPhoto=await compressImage(file,400,0.6);        // thumbnail on-device
+  const img=$('m-photo-img'),pv=$('m-photo-preview');
+  if(img&&pv){img.src=pendingPhoto;pv.classList.add('show');}
+}
+function ocrStatus(msg,err){const el=$('m-ocr-status');if(!el)return;el.textContent=msg;el.classList.add('show');el.classList.toggle('err',!!err);}
+async function runOCR(){
+  const btn=$('m-ocr');if(btn)btn.disabled=true;
+  ocrStatus('Reading receipt with '+settings.provider+'…',false);
+  try{
+    const data=await callVisionOCR(pendingFullPhoto||pendingPhoto);
+    if(data.seller&&$('m-seller')&&!$('m-seller').value)$('m-seller').value=data.seller;
+    if(data.date&&$('m-date'))$('m-date').value=data.date;
+    if(data.total!=null&&$('m-price'))$('m-price').value=data.total;
+    if(data.item&&$('m-item')&&!$('m-item').value)$('m-item').value=data.item;
+    if(data.category&&$('m-category')&&!$('m-category').value)$('m-category').value=data.category;
+    if(data.receipt&&$('m-receipt')&&!$('m-receipt').value)$('m-receipt').value=data.receipt;
+    ocrStatus('Filled from receipt — please double-check the amounts.',false);
+  }catch(err){console.error(err);ocrStatus('Couldn\'t read receipt: '+(err.message||'error')+'. Enter details manually.',true);}
+  if(btn)btn.disabled=false;
+}
+/* ---- provider-agnostic vision call ---- */
+const OCR_PROMPT='You are a receipt parser. Extract fields from this receipt image and reply ONLY with strict JSON, no markdown, no prose. Schema: {"seller":string,"date":"YYYY-MM-DD","total":number,"item":string,"category":string,"receipt":string}. "item" = short summary of what was bought. "category" = one of Foundation, Structure / Masonry, Roofing, Electrical, Plumbing, Tiles / Flooring, Doors / Windows, Paint / Finishing, Kitchen, Bathroom, Labour, Permits / Fees, Other. "receipt" = receipt/invoice number if visible else empty. Use empty string or null if a field is unknown.';
+function providerConfig(){
+  const p=settings.provider;
+  if(p==='openai')return{url:'https://api.openai.com/v1/chat/completions',model:settings.model||'gpt-4o',auth:'Bearer '+settings.apiKey};
+  if(p==='qwen')return{url:'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',model:settings.model||'qwen-vl-max',auth:'Bearer '+settings.apiKey};
+  if(p==='deepseek')return{url:'https://api.deepseek.com/v1/chat/completions',model:settings.model||'deepseek-chat',auth:'Bearer '+settings.apiKey};
+  throw new Error('Unknown provider');
+}
+async function callVisionOCR(dataUrl){
+  const cfg=providerConfig();
+  const body={model:cfg.model,messages:[{role:'user',content:[
+    {type:'text',text:OCR_PROMPT},
+    {type:'image_url',image_url:{url:dataUrl}}
+  ]}],max_tokens:400,temperature:0};
+  const res=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':cfg.auth},body:JSON.stringify(body)});
+  if(!res.ok){const t=await res.text();throw new Error('API '+res.status);}
+  const json=await res.json();
+  let txt=(json.choices&&json.choices[0]&&json.choices[0].message&&json.choices[0].message.content)||'';
+  txt=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
+  const m=txt.match(/\{[\s\S]*\}/);if(m)txt=m[0];
+  return JSON.parse(txt);
+}
+function showErr(msg){const e=$('modal-error');e.textContent=msg;e.classList.add('show');}
+async function saveModal(){
+  const k=editKind,val=id=>{const el=$(id);return el?el.value:'';};let obj;
+  if(k==='funds'){const a=val('m-amount');if(a===''||isNaN(+a))return showErr('Enter a valid amount.');
+    obj={type:val('m-type'),label:val('m-label').trim(),amount:+a,date:val('m-date')||todayStr(),notes:val('m-notes').trim()};}
+  else if(k==='budget'){const c=val('m-category').trim(),b=val('m-budgeted');if(!c||b==='')return showErr('Enter a category and a budgeted amount.');
+    obj={category:c,budgeted:+b,notes:val('m-notes').trim()};}
+  else if(k==='actions'){const t=val('m-title').trim();if(!t)return showErr('Enter a task name.');
+    obj={title:t,due:val('m-due'),status:val('m-status'),notes:val('m-notes').trim()};}
+  else if(k==='sellers'){const n=val('m-name').trim();if(!n)return showErr('Enter a seller name.');const pr=val('m-price');
+    obj={name:n,contact:val('m-contact').trim(),item:val('m-item').trim(),price:pr===''?'':+pr,status:val('m-status'),notes:val('m-notes').trim()};}
+  else if(k==='purchases'){const it=val('m-item').trim(),pr=val('m-price');if(!it||pr==='')return showErr('Enter an item name and price.');
+    obj={item:it,category:val('m-category').trim(),seller:val('m-seller').trim(),price:+pr,date:val('m-date')||todayStr(),receipt:val('m-receipt').trim(),thumb:pendingPhoto||(editing?editing.thumb:null)};
+    // upload full photo to Drive if connected
+    if(pendingFullPhoto&&settings.driveToken){try{const link=await uploadPhotoToDrive(pendingFullPhoto,it);if(link){obj.driveLink=link.webViewLink;obj.driveFileId=link.id;}}catch(e){toast('Drive upload failed — photo kept on device');}}
+    else if(editing&&editing.driveLink){obj.driveLink=editing.driveLink;obj.driveFileId=editing.driveFileId;}
+  }
+  if(editing)Object.assign(editing,obj);else{obj.id=uid();state[k].push(obj);}
+  await persist(k);closeModal();render();
+  if(settings.autoCsv&&settings.driveToken)scheduleCsvSync();
+}
+
+function compressImage(file,maxDim,quality){maxDim=maxDim||1000;quality=quality||0.6;
+  return new Promise((res,rej)=>{const r=new FileReader();
+    r.onload=()=>{const img=new Image();img.onload=()=>{let w=img.width,h=img.height;
+      if(w>h&&w>maxDim){h=Math.round(h*maxDim/w);w=maxDim;}else if(h>maxDim){w=Math.round(w*maxDim/h);h=maxDim;}
+      const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+      res(c.toDataURL('image/jpeg',quality));};img.onerror=rej;img.src=r.result;};
+    r.onerror=rej;r.readAsDataURL(file);});}
+
+/* ---- list events ---- */
+function attach(){
+  const root=$('panel-root');
+  root.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>openModal(b.dataset.add,null));
+  root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const k=b.dataset.edit;const r=state[k].find(x=>x.id===b.dataset.id);if(r)openModal(k,r);});
+  root.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{const k=b.dataset.del;if(!confirm('Delete this entry?'))return;
+    state[k]=state[k].filter(x=>x.id!==b.dataset.id);await persist(k);render();});
+  root.querySelectorAll('[data-done]').forEach(b=>b.onclick=async()=>{const it=state.actions.find(a=>a.id===b.dataset.done);if(it){it.status='done';await persist('actions');render();}});
+  root.querySelectorAll('[data-lightbox]').forEach(im=>im.onclick=()=>{const r=state.purchases.find(x=>x.id===im.dataset.lightbox);
+    const src=r&&(r.driveLink?null:r.thumb);if(r&&r.thumb){$('lightbox-img').src=r.thumb;$('lightbox').classList.add('show');}});
+}
+$('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeModal();});
+$('lightbox-close').onclick=()=>$('lightbox').classList.remove('show');
+$('lightbox').addEventListener('click',e=>{if(e.target.id==='lightbox')$('lightbox').classList.remove('show');});
+
+/* ---- toast ---- */
+let toastT;function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600);}
+
+/* ---- CSV export / import ---- */
+function toCSV(){
+  const lines=[];
+  const push=(section,rows,cols)=>{lines.push('#'+section);lines.push(cols.join(','));
+    rows.forEach(r=>lines.push(cols.map(c=>csvCell(r[c])).join(',')));lines.push('');};
+  push('funds',state.funds,['id','type','label','amount','date','notes']);
+  push('budget',state.budget,['id','category','budgeted','notes']);
+  push('actions',state.actions,['id','title','due','status','notes']);
+  push('sellers',state.sellers,['id','name','contact','item','price','status','notes']);
+  push('purchases',state.purchases,['id','item','category','seller','price','date','receipt','driveLink']);
+  return lines.join('\n');
+}
+function csvCell(v){if(v==null)return '';v=String(v);if(/[",\n]/.test(v))return '"'+v.replace(/"/g,'""')+'"';return v;}
+function parseCSVLine(line){const out=[];let cur='',q=false;for(let i=0;i<line.length;i++){const ch=line[i];
+  if(q){if(ch==='"'){if(line[i+1]==='"'){cur+='"';i++;}else q=false;}else cur+=ch;}
+  else{if(ch==='"')q=true;else if(ch===','){out.push(cur);cur='';}else cur+=ch;}}out.push(cur);return out;}
+function fromCSV(text){
+  const lines=text.split(/\r?\n/);let section=null,cols=null;const fresh={funds:[],budget:[],actions:[],sellers:[],purchases:[]};
+  for(const raw of lines){if(!raw.trim()){cols=null;continue;}
+    if(raw[0]==='#'){section=raw.slice(1).trim();cols=null;continue;}
+    if(!section||!fresh[section])continue;
+    if(!cols){cols=parseCSVLine(raw);continue;}
+    const vals=parseCSVLine(raw),o={};cols.forEach((c,i)=>o[c]=vals[i]!==undefined?vals[i]:'');
+    ['amount','budgeted','price'].forEach(n=>{if(o[n]!==undefined&&o[n]!=='')o[n]=+o[n];});
+    if(!o.id)o.id=uid();fresh[section].push(o);}
+  return fresh;
+}
+function downloadCSV(){const csv=toCSV();const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='site-ledger-'+todayStr()+'.csv';a.click();URL.revokeObjectURL(url);toast('CSV exported');}
+async function importCSVFile(file){const text=await file.text();const fresh=fromCSV(text);
+  if(!confirm('Import will REPLACE all current data with the CSV contents. Continue?'))return;
+  state=fresh;for(const s of ['funds','budget','actions','sellers','purchases'])await persist(s);render();toast('CSV imported');}
+
+/* ---- Google Drive (optional, needs secure context + OAuth client id) ---- */
+const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
+let gTokenClient=null;
+function secureContext(){return window.isSecureContext===true;}
+function loadGis(){return new Promise((res,rej)=>{if(window.google&&google.accounts&&google.accounts.oauth2)return res();
+  const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=res;s.onerror=()=>rej(new Error('Could not load Google script'));document.head.appendChild(s);});}
+async function driveConnect(){
+  if(!secureContext())return toast('Drive needs https or localhost — see Settings notes');
+  if(!settings.driveClientId)return toast('Add your Google OAuth Client ID in Settings');
+  await loadGis();
+  gTokenClient=google.accounts.oauth2.initTokenClient({client_id:settings.driveClientId,scope:DRIVE_SCOPE,
+    callback:async resp=>{if(resp&&resp.access_token){settings.driveToken=resp.access_token;await saveSettings();await ensureDriveFolder();toast('Google Drive connected');updateSyncPill();renderSettings();}}});
+  gTokenClient.requestAccessToken({prompt:'consent'});
+}
+async function driveDisconnect(){settings.driveToken=null;await saveSettings();updateSyncPill();renderSettings();toast('Drive disconnected');}
+async function driveFetch(url,opts){opts=opts||{};opts.headers=Object.assign({'Authorization':'Bearer '+settings.driveToken},opts.headers||{});
+  const r=await fetch(url,opts);if(r.status===401){settings.driveToken=null;await saveSettings();updateSyncPill();throw new Error('Drive session expired — reconnect');}return r;}
+async function ensureDriveFolder(){
+  if(settings.driveFolderId)return settings.driveFolderId;
+  const q=encodeURIComponent("name='Site Ledger' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+  const r=await driveFetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,name)');
+  const j=await r.json();
+  if(j.files&&j.files.length){settings.driveFolderId=j.files[0].id;}
+  else{const cr=await driveFetch('https://www.googleapis.com/drive/v3/files',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:'Site Ledger',mimeType:'application/vnd.google-apps.folder'})});const cj=await cr.json();settings.driveFolderId=cj.id;}
+  await saveSettings();return settings.driveFolderId;
+}
+function dataURLtoBlob(d){const [meta,b64]=d.split(',');const mime=(meta.match(/:(.*?);/)||[])[1]||'image/jpeg';
+  const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type:mime});}
+async function uploadPhotoToDrive(dataUrl,name){
+  await ensureDriveFolder();
+  const meta={name:'receipt-'+todayStr()+'-'+name.slice(0,20).replace(/[^a-z0-9]/gi,'_')+'.jpg',parents:[settings.driveFolderId]};
+  const blob=dataURLtoBlob(dataUrl);
+  const form=new FormData();form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));form.append('file',blob);
+  const r=await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{method:'POST',body:form});
+  return await r.json();
+}
+let csvSyncT;function scheduleCsvSync(){clearTimeout(csvSyncT);csvSyncT=setTimeout(syncCsvToDrive,1500);}
+async function syncCsvToDrive(){
+  if(!settings.driveToken)return;try{await ensureDriveFolder();
+    const csv=toCSV();const blob=new Blob([csv],{type:'text/csv'});
+    const q=encodeURIComponent("name='site-ledger.csv' and '"+settings.driveFolderId+"' in parents and trashed=false");
+    const r=await driveFetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id)');const j=await r.json();
+    if(j.files&&j.files.length){const id=j.files[0].id;
+      const form=new FormData();form.append('metadata',new Blob([JSON.stringify({name:'site-ledger.csv'})],{type:'application/json'}));form.append('file',blob);
+      await driveFetch('https://www.googleapis.com/upload/drive/v3/files/'+id+'?uploadType=multipart',{method:'PATCH',body:form});}
+    else{const meta={name:'site-ledger.csv',parents:[settings.driveFolderId]};
+      const form=new FormData();form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));form.append('file',blob);
+      await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{method:'POST',body:form});}
+    toast('Synced to Drive');
+  }catch(e){toast(e.message||'Drive sync failed');}
+}
+function updateSyncPill(){const on=!!settings.driveToken;$('sync-dot').classList.toggle('on',on);
+  $('sync-text').textContent=on?'Synced to Google Drive':'Local only';}
+
+/* ---- settings ---- */
+$('open-settings').onclick=()=>{renderSettings();$('settings-overlay').classList.add('show');};
+$('settings-overlay').addEventListener('click',e=>{if(e.target.id==='settings-overlay')$('settings-overlay').classList.remove('show');});
+function renderSettings(){
+  const insecure=!secureContext();
+  $('settings-modal').innerHTML=
+    '<div class="modal-head"><p class="modal-title">Settings</p><button class="modal-close" id="set-close">&times;</button></div>'+
+    '<div class="set-section"><h3>AI receipt scanning</h3><p class="hint">Choose your provider and paste your API key. The key is stored only on this device.</p>'+
+    '<div class="field" style="margin-bottom:10px"><label>Provider</label><select id="set-provider">'+
+      '<option value="openai"'+(settings.provider==='openai'?' selected':'')+'>OpenAI (gpt-4o)</option>'+
+      '<option value="qwen"'+(settings.provider==='qwen'?' selected':'')+'>Qwen-VL (DashScope)</option>'+
+      '<option value="deepseek"'+(settings.provider==='deepseek'?' selected':'')+'>DeepSeek-VL</option></select></div>'+
+    '<div class="field" style="margin-bottom:10px"><label>API key</label><input id="set-key" type="password" value="'+esc(settings.apiKey)+'" placeholder="sk-…"></div>'+
+    '<div class="field"><label>Model (optional override)</label><input id="set-model" value="'+esc(settings.model)+'" placeholder="default per provider"></div>'+
+    '<div class="set-note">Calling these APIs from the browser exposes your key to anyone who can read this file. Fine for your own phone — don\'t share the file with a key saved in it.</div></div>'+
+    '<div class="set-section"><h3>Google Drive sync</h3><p class="hint">Optional. Backs up your data as <b>site-ledger.csv</b> and stores full receipt photos in a "Site Ledger" folder.</p>'+
+    (insecure?'<div class="set-note">Drive sync needs a secure context (https or localhost). You\'re on file:// now, so it\'s disabled. Manual CSV export/import below works everywhere.</div>':
+      ('<div class="field" style="margin-bottom:10px"><label>Google OAuth Client ID</label><input id="set-drive-id" value="'+esc(settings.driveClientId)+'" placeholder="…apps.googleusercontent.com"></div>'+
+       '<div class="set-row">'+(settings.driveToken?'<button class="set-btn" id="drive-disconnect">Disconnect Drive</button><button class="set-btn accent" id="drive-syncnow">Sync now</button>':'<button class="set-btn accent" id="drive-connect">Connect Google Drive</button>')+'</div>'+
+       '<div class="set-note">One-time setup: create an OAuth client ID in Google Cloud Console (see the setup guide) and paste it above.</div>'))+
+    '</div>'+
+    '<div class="set-section"><h3>Manual backup (CSV)</h3><p class="hint">Works offline and everywhere. Export a CSV you can keep or drop into Drive yourself; import to restore.</p>'+
+    '<div class="set-row"><button class="set-btn" id="csv-export">Export CSV</button>'+
+    '<button class="set-btn" id="csv-import">Import CSV</button>'+
+    '<input type="file" accept=".csv,text/csv" id="csv-file" style="display:none"></div></div>'+
+    '<div class="modal-actions"><button class="btn-primary" id="set-save">Save settings</button></div>';
+  $('set-close').onclick=()=>$('settings-overlay').classList.remove('show');
+  $('set-save').onclick=async()=>{settings.provider=$('set-provider').value;settings.apiKey=$('set-key').value.trim();
+    settings.model=$('set-model').value.trim();const di=$('set-drive-id');if(di)settings.driveClientId=di.value.trim();
+    await saveSettings();updateSyncPill();$('settings-overlay').classList.remove('show');toast('Settings saved');};
+  $('csv-export').onclick=downloadCSV;
+  $('csv-import').onclick=()=>$('csv-file').click();
+  $('csv-file').onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)importCSVFile(f);};
+  const dc=$('drive-connect');if(dc)dc.onclick=driveConnect;
+  const dd=$('drive-disconnect');if(dd)dd.onclick=driveDisconnect;
+  const ds=$('drive-syncnow');if(ds)ds.onclick=syncCsvToDrive;
+}
+
+/* ---- init ---- */
+(async function init(){try{await openDB();await loadAll();}catch(e){console.error(e);}render();})();
+</script>
+</body>
+</html>
