@@ -1,7 +1,10 @@
-import {settings, session} from './store.js?v=20260818s';
-import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame} from './util.js?v=20260818s';
-import {CATEGORIES} from './config.js?v=20260818s';
-import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260818s';
+import {settings, session} from './store.js?v=20260818t';
+import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame} from './util.js?v=20260818t';
+import {CATEGORIES} from './config.js?v=20260818t';
+import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260818t';
+import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260818t';
+
+export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260818t';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -11,62 +14,16 @@ export function ocrStatus(msg, err) {
   el.classList.toggle('err', !!err);
 }
 
-export function clearPendingPhoto() {
-  const p = session.pending;
-  if (p && Array.isArray(p.photos)) {
-    p.photos.forEach(ph => { if (ph && ph.previewUrl) try { URL.revokeObjectURL(ph.previewUrl); } catch (e) {} });
-  } else if (p && p.previewUrl) {
-    try { URL.revokeObjectURL(p.previewUrl); } catch (e) {}
-  }
-  session.pending = null;
-}
-
-function showPreview() {
-  const p = session.pending;
-  const list = $('m-photo-list'), pv = $('m-photo-preview'), meta = $('m-photo-meta');
-  if (!list || !pv || !p || !Array.isArray(p.photos) || !p.photos.length) return;
-  list.innerHTML = p.photos.map((ph, i) =>
-    '<img src="' + esc(ph.thumbDataUrl || ph.previewUrl || '') + '" data-photo-idx="' + i + '" alt="Receipt page ' + (i + 1) + '">'
-  ).join('');
-  list.querySelectorAll('[data-photo-idx]').forEach(im => {
-    im.onclick = () => openPhotoLightbox(Number(im.dataset.photoIdx || 0));
-  });
-  pv.classList.add('show');
-  if (meta) {
-    const files = p.photos.filter(ph => ph && ph.originalFile);
-    const kb = files.reduce((s, ph) => s + Math.max(1, Math.round((ph.originalFile.size || 0) / 1024)), 0);
-    meta.textContent = files.length
-      ? (files.length + ' photo' + (files.length === 1 ? '' : 's') + ' attached · ' + kb + ' KB total')
-      : 'Photo attached — correct the table below.';
-  }
-}
-
-function firstPendingPhoto() {
-  const p = session.pending;
-  return (p && Array.isArray(p.photos) && p.photos[0]) || null;
-}
-
-export async function handlePhoto(file, append) {
-  if (!append) clearPendingPhoto();
-  session.photoCleared = false;
-  let previewUrl = '';
-  try { previewUrl = URL.createObjectURL(file); } catch (e) {}
-  let thumbDataUrl = '', ocrDataUrl = '';
-  try { thumbDataUrl = await compressImage(file, 400, 0.6); } catch (e) {}
-  try { ocrDataUrl = await compressImage(file, 2000, 0.85); } catch (e) {}
-  const nextPhoto = {
-    originalFile: file,
-    previewUrl,
-    thumbDataUrl: thumbDataUrl || previewUrl,
-    ocrDataUrl: ocrDataUrl || thumbDataUrl || previewUrl,
-    ext: extFromFile(file)
-  };
-  if (!session.pending || !Array.isArray(session.pending.photos)) session.pending = {photos: []};
-  session.pending.photos.push(nextPhoto);
-  showPreview();
+function photoNoun() {
+  return session.editKind === 'sellers' ? 'quote' : 'receipt';
 }
 
 function emptyLine() { return {item: '', qty: '', rate: '', amount: '', category: ''}; }
+
+function tableHasCat() {
+  const body = $('m-lines');
+  return !(body && body.getAttribute('data-skip-cat') === '1');
+}
 
 function catSelectHtml(selected) {
   const sel = normalizeCategory(selected);
@@ -186,23 +143,26 @@ export function normalizeOcr(data) {
   return {seller, date, receipt, category: categories[0] || '', categories, total, item, lines};
 }
 
-function lineRowHtml(ln) {
+function lineRowHtml(ln, withCat) {
   ln = ln || emptyLine();
+  if (withCat == null) withCat = tableHasCat();
   return '<tr>' +
     '<td class="col-item"><input class="ln-item" value="' + esc(ln.item) + '" placeholder="Item" autocomplete="off"></td>' +
     '<td class="col-qty"><input class="ln-qty" value="' + esc(ln.qty) + '" placeholder="Qty" inputmode="decimal"></td>' +
     '<td class="col-rate"><input class="ln-rate" value="' + esc(ln.rate) + '" placeholder="Rate" inputmode="decimal"></td>' +
     '<td class="col-amt"><input class="ln-amount" value="' + esc(ln.amount) + '" placeholder="Rs" inputmode="decimal"></td>' +
-    '<td class="col-cat">' + catSelectHtml(ln.category) + '</td>' +
+    (withCat ? '<td class="col-cat">' + catSelectHtml(ln.category) + '</td>' : '') +
     '<td class="col-del"><button type="button" class="ln-del" aria-label="Remove row">&times;</button></td>' +
     '</tr>';
 }
 
-export function purchaseLinesHtml(lines) {
+export function purchaseLinesHtml(lines, opts) {
+  const skip = !!(opts && opts.skipCategory);
   const rows = (lines && lines.length) ? lines : [emptyLine()];
   return '<div class="receipt-table-wrap">' +
-    '<table class="receipt-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th><th>Category</th><th></th></tr></thead>' +
-    '<tbody id="m-lines">' + rows.map(lineRowHtml).join('') + '</tbody></table></div>' +
+    '<table class="receipt-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th>' +
+    (skip ? '' : '<th>Category</th>') + '<th></th></tr></thead>' +
+    '<tbody id="m-lines"' + (skip ? ' data-skip-cat="1"' : '') + '>' + rows.map(ln => lineRowHtml(ln, !skip)).join('') + '</tbody></table></div>' +
     '<button type="button" class="line-add" id="m-line-add">+ Add row</button>';
 }
 
@@ -245,7 +205,7 @@ export function renderLinesIntoTable(lines, overwrite) {
   const body = $('m-lines');
   if (!body) return;
   const next = (lines && lines.length) ? lines : [emptyLine()];
-  if (overwrite || !readLinesFromTable().length) body.innerHTML = next.map(lineRowHtml).join('');
+  if (overwrite || !readLinesFromTable().length) body.innerHTML = next.map(ln => lineRowHtml(ln, tableHasCat())).join('');
   bindLineTable();
 }
 
@@ -257,7 +217,7 @@ export function bindLineTable() {
     add.onclick = () => {
       const tb = $('m-lines');
       if (!tb) return;
-      tb.insertAdjacentHTML('beforeend', lineRowHtml(emptyLine()));
+      tb.insertAdjacentHTML('beforeend', lineRowHtml(emptyLine(), tableHasCat()));
     };
   }
   if (!body || body._lineBound) return;
@@ -302,6 +262,7 @@ export function applyOcrFields(raw, overwrite) {
   };
   const filled = [];
   if (set('m-seller', data.seller)) filled.push('seller');
+  if (set('m-name', data.seller)) filled.push('name');
   if (data.date) {
     const dEl = $('m-date');
     if (dEl && (overwrite || !String(dEl.value || '').trim())) { dEl.value = data.date; filled.push('date'); }
@@ -343,9 +304,7 @@ function hasAiReady() {
 }
 
 function pendingPhotoUrls() {
-  const p = session.pending;
-  const photos = p && Array.isArray(p.photos) ? p.photos : [];
-  return photos.map(ph => ph && (ph.ocrDataUrl || ph.thumbDataUrl || ph.previewUrl)).filter(Boolean);
+  return pendingPhotos().map(ph => ocrSrc(ph)).filter(Boolean);
 }
 
 function missingFillPrompt(lines) {
@@ -472,18 +431,18 @@ async function saveInlineAiKey() {
 }
 
 export async function runOCR(overwrite) {
-  const p = session.pending;
-  const photos = p && Array.isArray(p.photos) ? p.photos : [];
-  if (!photos.length) { ocrStatus('Take or upload a receipt photo first.', true); return; }
+  const photos = pendingPhotos();
+  const noun = photoNoun();
+  if (!photos.length) { ocrStatus('Take or upload a ' + noun + ' photo first.', true); return; }
   const btn = $('m-ocr');
   if (btn) btn.disabled = true;
-  ocrStatus('Reading ' + photos.length + ' receipt page' + (photos.length === 1 ? '' : 's') + ' with ' + (settings.provider === 'custom' ? (settings.model || 'custom model') : settings.provider) + '…', false);
+  ocrStatus('Reading ' + photos.length + ' ' + noun + ' page' + (photos.length === 1 ? '' : 's') + ' with ' + (settings.provider === 'custom' ? (settings.model || 'custom model') : settings.provider) + '…', false);
   try {
     const merged = {seller: '', date: '', receipt: '', category: '', categories: [], total: '', item: '', lines: []};
     for (let i = 0; i < photos.length; i++) {
       const ph = photos[i];
       ocrStatus('Reading page ' + (i + 1) + ' of ' + photos.length + '…', false);
-      const raw = await callVisionOCR(ph.ocrDataUrl || ph.thumbDataUrl || ph.previewUrl);
+      const raw = await callVisionOCR(ocrSrc(ph));
       const d = normalizeOcr(raw);
       if (!d) continue;
       if (!merged.seller && d.seller) merged.seller = d.seller;
@@ -498,15 +457,15 @@ export async function runOCR(overwrite) {
     if (!merged.item) merged.item = summarizePurchase(merged.seller, merged.lines);
     const result = applyOcrFields(merged, !!overwrite);
     const n = result && result.data && result.data.lines ? result.data.lines.length : 0;
-    const who = ($('m-seller') && $('m-seller').value) || 'the receipt';
-    if (!n && !($('m-seller') && $('m-seller').value) && !($('m-price') && $('m-price').value)) {
+    const who = ($('m-seller') && $('m-seller').value) || ($('m-name') && $('m-name').value) || ('the ' + noun);
+    if (!n && !($('m-seller') && $('m-seller').value) && !($('m-name') && $('m-name').value) && !($('m-price') && $('m-price').value)) {
       ocrStatus('AI could not read line items from these photos. Type them into the table, or tap Re-scan.', true);
     } else {
       ocrStatus('Filled the table from ' + who + ' · ' + photos.length + ' page' + (photos.length === 1 ? '' : 's') + (n ? (' · ' + n + ' line' + (n === 1 ? '' : 's')) : '') + '. Correct anything that’s wrong, then Save.', false);
     }
   } catch (err) {
     console.error(err);
-    ocrStatus('Couldn\'t read receipt: ' + (err.message || 'error') + '. Keep the photo and fill the table yourself.', true);
+    ocrStatus('Couldn\'t read ' + noun + ': ' + (err.message || 'error') + '. Keep the photo and fill the table yourself.', true);
   }
   if (btn) btn.disabled = false;
 }
@@ -531,7 +490,7 @@ export async function startReceiptScan() {
       return;
     }
   }
-  if (session.pending) { await runOCR(true); return; }
+  if (pendingPhotos().length) { await runOCR(true); return; }
   const inp = document.createElement('input');
   inp.type = 'file';
   inp.accept = 'image/*';
@@ -544,26 +503,6 @@ export async function startReceiptScan() {
     await runOCR(true);
   };
   inp.click();
-}
-
-export function removePendingPhoto() {
-  clearPendingPhoto();
-  session.photoCleared = true;
-  const pv = $('m-photo-preview');
-  if (pv) pv.classList.remove('show');
-  const list = $('m-photo-list');
-  if (list) list.innerHTML = '';
-  ['m-photo', 'm-photo-cam'].forEach(id => { const el = $(id); if (el) el.value = ''; });
-}
-
-export function openPhotoLightbox(idx) {
-  const p = session.pending;
-  const ph = (p && Array.isArray(p.photos) && p.photos[idx || 0]) || firstPendingPhoto();
-  const src = (ph && (ph.previewUrl || ph.thumbDataUrl)) || '';
-  if (!src) return;
-  const img = $('lightbox-img'), box = $('lightbox');
-  if (img) img.src = src;
-  if (box) box.classList.add('show');
 }
 
 export function readPurchaseForm() {

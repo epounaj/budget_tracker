@@ -1,8 +1,8 @@
-import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818s';
-import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, ledgerRecordCount, snapshotLedger, mergeLedgers, LEDGER_STORES, clearSavedToken} from './store.js?v=20260818s';
-import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage, driveFolderName} from './util.js?v=20260818s';
-import {toCSV, fromCSV} from './csv.js?v=20260818s';
-import {hub} from './hub.js?v=20260818s';
+import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818t';
+import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, ledgerRecordCount, snapshotLedger, mergeLedgers, LEDGER_STORES, clearSavedToken} from './store.js?v=20260818t';
+import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage, driveFolderName} from './util.js?v=20260818t';
+import {toCSV, fromCSV} from './csv.js?v=20260818t';
+import {hub} from './hub.js?v=20260818t';
 
 export function appClientId() {
   const inp = $('login-client-id');
@@ -314,7 +314,7 @@ async function hydratePurchaseThumbs() {
       const r = await driveFetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(p.driveFileId) + '?alt=media');
       const blob = await r.blob();
       const file = new File([blob], 'receipt.jpg', {type: blob.type || 'image/jpeg'});
-      p.thumb = await compressImage(file, 360, 0.55);
+      p.thumb = await compressImage(file, 720, 0.82);
       changed = true;
     } catch (e) {}
   }

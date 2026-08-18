@@ -1,15 +1,14 @@
-import {TITLES, CHIP} from './config.js?v=20260818s';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818s';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260818s';
-import {hub} from './hub.js?v=20260818s';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818s';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260818s';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818s';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818s';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818s';
+import {TITLES, CHIP} from './config.js?v=20260818t';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818t';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260818t';
+import {hub} from './hub.js?v=20260818t';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818t';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260818t';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260818t';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818t';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818t';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818t';
 
-let sellerPendingPhotos = [];
-let sellerPendingLines = [];
 let sellerItemSearch = '';
 let saveBusy = false;
 
@@ -29,97 +28,12 @@ function catChips(p) {
   if (!cats.length) return '<span class="muted">—</span>';
   return cats.map(c => '<span class="chip cat">' + esc(c) + '</span>').join('');
 }
-function showLightbox(src, cap, driveLink) {
-  const img = $('lightbox-img'), box = $('lightbox'), bar = $('lightbox-bar'), open = $('lightbox-drive'), label = $('lightbox-cap');
-  if (!box) return;
-  if (img) {
-    if (src) { img.src = src; img.style.display = ''; }
-    else { img.removeAttribute('src'); img.style.display = 'none'; }
-  }
-  if (label) label.textContent = cap || '';
-  if (open) {
-    if (driveLink) { open.href = driveLink; open.style.display = ''; }
-    else { open.removeAttribute('href'); open.style.display = 'none'; }
-  }
-  if (bar) bar.hidden = !(cap || driveLink);
-  box.classList.add('show');
-}
-
 function setSaveBusy(on) {
   saveBusy = !!on;
   const btn = $('modal-save');
   if (!btn) return;
   btn.disabled = !!on;
   btn.textContent = on ? 'Saving…' : (session.editing ? 'Save changes' : 'Save');
-}
-
-function sellerLinesTableHtml(lines) {
-  if (!Array.isArray(lines) || !lines.length) return '<p class="field-hint">No extracted line items yet.</p>';
-  return '<div class="receipt-table-wrap"><table class="receipt-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>' +
-    lines.map(l => '<tr><td>' + esc(l.item || '') + '</td><td class="num">' + esc(l.qty || '') + '</td><td class="num">' + fmtNum(l.rate) + '</td><td class="num">' + moneyDec(lineAmount(l)) + '</td></tr>').join('') +
-    '</tbody></table></div>';
-}
-
-async function extractSellerLinesFromPending(overwrite) {
-  const status = $('m-seller-ocr-status');
-  if (!sellerPendingPhotos.length) {
-    if (status) status.textContent = 'Add at least one seller photo first.';
-    return;
-  }
-  if (!settings.apiKey) {
-    if (status) status.textContent = 'AI key missing. Add it in Settings → AI receipt scanning.';
-    return;
-  }
-  const merged = [];
-  let firstSeller = '', firstCategory = '';
-  let failCount = 0;
-  let lastErr = '';
-  for (let i = 0; i < sellerPendingPhotos.length; i++) {
-    if (status) status.textContent = 'Reading seller image ' + (i + 1) + ' of ' + sellerPendingPhotos.length + '…';
-    const ph = sellerPendingPhotos[i];
-    try {
-      const raw = await callVisionOCR(ph.ocrDataUrl || ph.thumb || ph.url);
-      const data = normalizeOcr(raw);
-      if (!data) continue;
-      if (!firstSeller && data.seller) firstSeller = data.seller;
-      if (!firstCategory && data.category) firstCategory = data.category;
-      (data.lines || []).forEach(l => {
-        const item = String((l && l.item) || '').trim();
-        if (!item) return;
-        merged.push({
-          item,
-          qty: l.qty,
-          rate: Number(l.rate) || 0,
-          amount: lineAmount(l)
-        });
-      });
-    } catch (e) {
-      failCount++;
-      lastErr = e && e.message ? e.message : 'OCR failed';
-    }
-  }
-  if (merged.length && (overwrite || !sellerPendingLines.length)) sellerPendingLines = merged;
-  const itemEl = $('m-item');
-  if (itemEl && !itemEl.value.trim() && sellerPendingLines[0]) itemEl.value = sellerPendingLines[0].item || '';
-  const nameEl = $('m-name');
-  if (nameEl && !nameEl.value.trim() && firstSeller) nameEl.value = firstSeller;
-  const catEl = $('m-category');
-  if (catEl && !catEl.value.trim() && firstCategory) catEl.value = firstCategory;
-  const box = $('m-seller-lines');
-  if (box) box.innerHTML = sellerLinesTableHtml(sellerPendingLines);
-  const quotedEl = $('m-price');
-  if (quotedEl && sellerPendingLines.length && (!String(quotedEl.value || '').trim() || overwrite)) {
-    const sum = sumLines(sellerPendingLines);
-    if (sum > 0) quotedEl.value = String(Math.round(sum * 100) / 100);
-  }
-  if (status) {
-    if (sellerPendingLines.length) {
-      const extra = failCount ? (' (' + failCount + ' image' + (failCount === 1 ? '' : 's') + ' failed)') : '';
-      status.textContent = 'Extracted ' + sellerPendingLines.length + ' line items from seller images' + extra + '.';
-    } else {
-      status.textContent = 'Could not extract line items' + (lastErr ? (': ' + lastErr) : '') + '. You can still save manually.';
-    }
-  }
 }
 
 function chip(status) {
@@ -452,7 +366,7 @@ function renderSellers() {
 
   const items = state.sellers.map(s => '<div class="entry"><div class="entry-top"><div><p class="entry-name">' + esc(s.name) + '</p>' +
     (s.contact ? '<p class="entry-sub">' + esc(s.contact) + '</p>' : '') + '</div>' + chip(s.status) + '</div>' +
-    (Array.isArray(s.photos) && s.photos.length ? ('<div class="photo-list" style="margin-top:8px">' + s.photos.slice(0, 6).map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-lightbox="' + s.id + ':' + i + '" alt="Seller photo">').join('') + '</div>') : '') +
+    (Array.isArray(s.photos) && s.photos.length ? ('<div class="photo-list" style="margin-top:8px">' + s.photos.slice(0, 6).map((ph, i) => '<img src="' + esc(ph.thumb || '') + '" data-preview="seller" data-id="' + s.id + '" data-idx="' + i + '" alt="Seller photo">').join('') + '</div>') : '') +
     (Array.isArray(s.photoLinks) && s.photoLinks.length ? ('<div class="entry-meta">' + s.photoLinks.slice(0, 3).map((ln, i) => '<a href="' + esc(ln.webViewLink || ln.url || '#') + '" target="_blank" rel="noopener">Photo ' + (i + 1) + '</a>').join(' ') + '</div>') : '') +
     '<div class="entry-meta">' + (s.item ? '<span class="meta-item">' + esc(s.item) + '</span>' : '') +
     ((s.price !== '' && s.price != null) ? '<span class="meta-item">Quoted <strong>' + money(s.price) + '</strong></span>' : '') +
@@ -511,7 +425,7 @@ function renderPurchases() {
     const displayPrice = purchaseTotal(p);
     rows += '<tr class="clickable" data-row-id="' + p.id + '">' +
       '<td>' + esc(p.date || '') + '</td>' +
-      '<td class="item-cell">' + (p.thumb ? '<img src="' + p.thumb + '" class="thumb-sm" data-lightbox="' + p.id + '" alt="Receipt">' : '') + '<span>' + esc(p.item || '') + '</span></td>' +
+      '<td class="item-cell">' + (p.thumb ? '<img src="' + p.thumb + '" class="thumb-sm" data-preview="purchase" data-id="' + p.id + '" alt="Receipt">' : '') + '<span>' + esc(p.item || '') + '</span></td>' +
       '<td>' + esc(p.seller || '') + '</td>' +
       '<td>' + catChips(p) + '</td>' +
       '<td class="num tight">' + money(displayPrice) + '</td>' +
@@ -534,7 +448,7 @@ function renderPurchases() {
 
 function renderPurchaseDetail(p) {
   let html = '';
-  if (p.thumb) html += '<img src="' + p.thumb + '" class="detail-photo" data-lightbox="' + p.id + '" alt="Receipt">';
+  if (p.thumb) html += '<img src="' + p.thumb + '" class="detail-photo" data-preview="purchase" data-id="' + p.id + '" alt="Receipt">';
   html += '<dl class="detail-grid">';
   html += '<dt>Seller</dt><dd>' + esc(p.seller || '—') + '</dd>';
   html += '<dt>Date</dt><dd>' + esc(p.date || '—') + '</dd>';
@@ -592,21 +506,6 @@ function attach() {
       if (settings.driveToken) scheduleCsvSync();
     }
   });
-  root.querySelectorAll('[data-lightbox]').forEach(im => im.onclick = e => {
-    e.stopPropagation();
-    const r = state.purchases.find(x => x.id === im.dataset.lightbox);
-    if (!r) return;
-    showLightbox(r.thumb || '', r.item || 'Receipt', r.driveLink);
-  });
-  root.querySelectorAll('[data-seller-lightbox]').forEach(im => im.onclick = e => {
-    e.stopPropagation();
-    const [sid, idx] = String(im.dataset.sellerLightbox || '').split(':');
-    const s = state.sellers.find(x => x.id === sid);
-    if (!s || !Array.isArray(s.photos)) return;
-    const ph = s.photos[Number(idx) || 0];
-    if (!ph) return;
-    showLightbox(ph.url || ph.thumb || '', s.name || 'Seller photo', ph.webViewLink);
-  });
   const sellerSearchEl = root.querySelector('.seller-item-search');
   if (sellerSearchEl) {
     sellerSearchEl.oninput = e => applySellerItemSearch(e.target.value);
@@ -629,7 +528,7 @@ function attach() {
     render();
   });
   root.querySelectorAll('tr.clickable[data-row-id]').forEach(tr => tr.onclick = e => {
-    if (e.target.closest('[data-edit],[data-del],[data-lightbox]')) return;
+    if (e.target.closest('[data-edit],[data-del],[data-preview]')) return;
     const id = tr.dataset.rowId;
     purchaseExpandedId = purchaseExpandedId === id ? null : id;
     render();
@@ -671,6 +570,16 @@ function bindKanban(root) {
   });
 }
 
+function inlineAiHtml() {
+  return '<div class="inline-ai" id="inline-ai"><p>Paste your AI key once so scan can run. It is saved to your Drive profile.</p>' +
+    '<div class="form-grid">' +
+    '<div class="field"><label>Provider</label><select id="m-ai-provider">' + providerOptionsHtml() + '</select></div>' +
+    '<div class="field"><label>API key</label><input id="m-ai-key" type="password" placeholder="sk-… or your provider key" autocomplete="off"></div></div>' +
+    '<div id="m-ai-custom" style="display:none;margin-top:10px">' +
+    '<div class="field wide"><label class="req">API base URL</label><input id="m-ai-base" value="' + esc(settings.apiBase) + '" placeholder="https://api.example.com/v1" autocomplete="off"></div></div>' +
+    modelPickerHtml('m-ai') + '</div>';
+}
+
 function formBody(kind, p) {
   if (kind === 'funds') {
     p = p || {type: 'loan', label: '', amount: '', date: todayStr(), notes: ''};
@@ -700,51 +609,44 @@ function formBody(kind, p) {
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div></div>';
   }
   if (kind === 'sellers') {
-    p = p || {name: '', contact: '', item: '', price: '', status: 'shortlisted', notes: '', photos: [], photoLinks: []};
-    const curPhotos = sellerPendingPhotos.length ? sellerPendingPhotos : (Array.isArray(p.photos) ? p.photos : []);
-    const curLines = sellerPendingLines.length ? sellerPendingLines : (Array.isArray(p.quoteLines) ? p.quoteLines : []);
-    return '<div class="form-grid">' +
-      '<div class="field wide"><label class="req">Name</label><input id="m-name" value="' + esc(p.name) + '" placeholder="e.g. ABC Hardware" autocomplete="off"></div>' +
-      '<div class="field"><label>For</label><input list="category-options" id="m-item" value="' + esc(p.item) + '" placeholder="e.g. Roof tiles"></div>' +
-      '<div class="field"><label>Quoted (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="' + esc(p.price) + '" placeholder="Optional"></div>' +
+    p = p || {name: '', contact: '', item: '', price: '', status: 'shortlisted', notes: '', photos: [], photoLinks: [], quoteLines: []};
+    const hasKey = !!settings.apiKey;
+    const photos = existingFormPhotos(p, 'sellers');
+    const lines = Array.isArray(p.quoteLines) && p.quoteLines.length ? p.quoteLines : [];
+    return photoFieldHtml({
+      photos, hasKey,
+      kind: 'seller', recordId: p.id || '', alt: 'Seller photo',
+      hint: 'Add quote screenshots or storefront photos first. AI reads every page into one table.',
+      ocrLabel: hasKey ? 'Re-scan with AI' : 'Extract with AI',
+      extraHtml: hasKey ? '' : inlineAiHtml()
+    }) +
+      '<div class="receipt-meta">' +
+      '<div class="field"><label class="req">Name</label><input id="m-name" value="' + esc(p.name) + '" placeholder="e.g. ABC Hardware" autocomplete="off"></div>' +
       '<div class="field"><label>Contact</label><input id="m-contact" value="' + esc(p.contact) + '" placeholder="Optional" autocomplete="off"></div>' +
       '<div class="field"><label>Status</label><select id="m-status">' +
       '<option value="shortlisted"' + (p.status === 'shortlisted' ? ' selected' : '') + '>Shortlisted</option>' +
       '<option value="contacted"' + (p.status === 'contacted' ? ' selected' : '') + '>Contacted</option>' +
       '<option value="selected"' + (p.status === 'selected' ? ' selected' : '') + '>Selected</option>' +
       '<option value="rejected"' + (p.status === 'rejected' ? ' selected' : '') + '>Rejected</option></select></div>' +
-      '<div class="field wide"><label>Photos (storefront / quote screenshot)</label>' +
-      '<div class="photo-actions"><label class="photo-btn">Add photos<input type="file" accept="image/*" multiple id="m-seller-photo" style="display:none"></label></div>' +
-      '<div class="photo-list" id="m-seller-photo-list">' + curPhotos.map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-modal-photo="' + i + '" alt="Seller photo ' + (i + 1) + '">').join('') + '</div>' +
-      '<button type="button" class="photo-remove" id="m-seller-photo-remove" style="' + (curPhotos.length ? '' : 'display:none') + '">Remove all seller photos</button></div>' +
-      '<div class="field wide"><label>Extracted line items</label><button type="button" class="ocr-btn" id="m-seller-ocr" style="margin:4px 0 8px">Extract with AI</button><p class="field-hint" id="m-seller-ocr-status">' + (curLines.length ? ('Loaded ' + curLines.length + ' extracted lines.') : 'Add seller screenshots/photos and tap Extract with AI.') + '</p><div id="m-seller-lines">' + sellerLinesTableHtml(curLines) + '</div></div>' +
-      '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div></div>';
+      '<div class="field"><label>For</label><input list="category-options" id="m-item" value="' + esc(p.item) + '" placeholder="e.g. Roof tiles"></div></div>' +
+      '<p class="field-hint receipt-table-label">Quote line items — AI fills this; tap a cell to correct.</p>' +
+      purchaseLinesHtml(lines, {skipCategory: true}) +
+      '<div class="receipt-total-row">' +
+      '<div class="field"><label>Quoted (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="' + esc(p.price) + '" placeholder="Optional"></div></div>' +
+      '<div class="field wide" style="margin-top:12px"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div>';
   }
   if (kind === 'purchases') {
     p = p || {item: '', category: '', seller: '', price: '', date: todayStr(), receipt: '', thumb: null, lines: []};
-    const pendingPhotos = (session.pending && Array.isArray(session.pending.photos)) ? session.pending.photos : [];
-    const cur = (pendingPhotos[0] && (pendingPhotos[0].thumbDataUrl || pendingPhotos[0].previewUrl)) || p.thumb;
     const hasKey = !!settings.apiKey;
+    const photos = existingFormPhotos(p, 'purchases');
     const lines = parsePurchaseLines(p);
-    return '<div class="photo-field" style="margin-bottom:14px">' +
-      '<div class="photo-actions">' +
-      '<label class="photo-btn"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Camera' +
-      '<input type="file" accept="image/*" capture="environment" id="m-photo-cam" style="display:none"></label>' +
-      '<label class="photo-btn"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Gallery' +
-      '<input type="file" accept="image/*" multiple id="m-photo" style="display:none"></label></div>' +
-      '<p class="field-hint">For multi-page receipts, add all photos first. AI reads every page into one table.</p>' +
-      (hasKey ? '' : '<div class="inline-ai" id="inline-ai"><p>Paste your AI key once so scan can run. It is saved to your Drive profile.</p>' +
-        '<div class="form-grid">' +
-        '<div class="field"><label>Provider</label><select id="m-ai-provider">' + providerOptionsHtml() + '</select></div>' +
-        '<div class="field"><label>API key</label><input id="m-ai-key" type="password" placeholder="sk-… or your provider key" autocomplete="off"></div></div>' +
-        '<div id="m-ai-custom" style="display:none;margin-top:10px">' +
-        '<div class="field wide"><label class="req">API base URL</label><input id="m-ai-base" value="' + esc(settings.apiBase) + '" placeholder="https://api.example.com/v1" autocomplete="off"></div></div>' +
-        modelPickerHtml('m-ai') + '</div>') +
-      '<button type="button" class="ocr-btn" id="m-ocr" style="margin-top:10px"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>' + (hasKey ? 'Re-scan with AI' : 'Scan receipt') + '</button>' +
-      '<div class="ocr-status" id="m-ocr-status"></div>' +
-      '<div class="photo-preview ' + (cur ? 'show' : '') + '" id="m-photo-preview"><div class="photo-list" id="m-photo-list">' + (cur ? ('<img src="' + cur + '" alt="Receipt page 1">') : '') + '</div>' +
-      '<div class="photo-preview-meta"><p class="field-hint" id="m-photo-meta">' + (cur ? 'Photo attached. Tap it to view larger.' : '') + '</p>' +
-      '<button type="button" class="photo-remove" id="m-photo-remove">Remove photos</button></div></div></div>' +
+    return photoFieldHtml({
+      photos, hasKey,
+      kind: 'purchase', recordId: p.id || '', alt: 'Receipt',
+      hint: 'For multi-page receipts, add all photos first. AI reads every page into one table.',
+      ocrLabel: hasKey ? 'Re-scan with AI' : 'Scan receipt',
+      extraHtml: hasKey ? '' : inlineAiHtml()
+    }) +
       '<div class="receipt-meta">' +
       '<div class="field"><label>Seller</label><input id="m-seller" value="' + esc(p.seller) + '" placeholder="Shop / company" autocomplete="off"></div>' +
       '<div class="field"><label>Date</label><input type="date" id="m-date" value="' + esc(p.date || todayStr()) + '"></div>' +
@@ -768,14 +670,12 @@ export function openModal(kind, rec) {
   session.editing = rec || null;
   session.photoCleared = false;
   clearPendingPhoto();
-  sellerPendingPhotos = [];
-  sellerPendingLines = (kind === 'sellers' && rec && Array.isArray(rec.quoteLines)) ? rec.quoteLines.slice() : [];
   const title = (rec ? TITLES[kind][1] : TITLES[kind][0]);
   const sub = {
     funds: 'How much came in, and from where.',
     budget: 'A category and the amount you planned for it.',
     actions: 'One thing still to do. Due date is optional.',
-    sellers: 'A supplier and their quote, if you have it.',
+    sellers: 'Snap or pick a quote photo. AI fills the line table. You can still correct anything.',
     purchases: 'Snap or pick a receipt. AI fills items, categories, and a short label. You can still correct anything.'
   }[kind];
   const modal = $('modal');
@@ -790,7 +690,7 @@ export function openModal(kind, rec) {
     '<button class="btn-cancel" id="modal-cancel">Cancel</button></div>';
   overlay.classList.add('show');
   bindModal();
-  if (kind !== 'purchases') setTimeout(() => {
+  if (kind !== 'purchases' && kind !== 'sellers') setTimeout(() => {
     const el = $('m-amount') || $('m-title') || $('m-name');
     if (el) el.focus();
   }, 40);
@@ -804,9 +704,6 @@ export function closeModal() {
   session.photoCleared = false;
   saveBusy = false;
   clearPendingPhoto();
-  sellerPendingPhotos.forEach(ph => { if (ph && ph.url && ph.url.startsWith('blob:')) try { URL.revokeObjectURL(ph.url); } catch (e) {} });
-  sellerPendingPhotos = [];
-  sellerPendingLines = [];
 }
 
 function bindModal() {
@@ -821,63 +718,8 @@ function bindModal() {
     e.preventDefault();
     saveModal();
   };
-  const onFile = async e => {
-    const fs = [...(e.target.files || [])];
-    if (!fs.length) return;
-    for (const f of fs) await handlePhoto(f, true);
-    await maybeScanAfterPhoto();
-    e.target.value = '';
-  };
-  const pin = $('m-photo'); if (pin) pin.addEventListener('change', onFile);
-  const cam = $('m-photo-cam'); if (cam) cam.addEventListener('change', onFile);
-  const prm = $('m-photo-remove'); if (prm) prm.onclick = removePendingPhoto;
+  bindAlbumControls(modal, maybeScanAfterPhoto);
   const ocr = $('m-ocr'); if (ocr) ocr.onclick = startReceiptScan;
-  const imgs = $('m-photo-list');
-  if (imgs) imgs.querySelectorAll('img').forEach((img, i) => { img.onclick = () => openPhotoLightbox(i); });
-  if (modal) modal.onpaste = async e => {
-    if (session.editKind !== 'purchases') return;
-    const items = [...((e.clipboardData && e.clipboardData.items) || [])];
-    const files = items.filter(it => it.type && it.type.startsWith('image/')).map(it => it.getAsFile()).filter(Boolean);
-    if (!files.length) return;
-    e.preventDefault();
-    for (const f of files) await handlePhoto(f, true);
-    await maybeScanAfterPhoto();
-  };
-  const sellerIn = $('m-seller-photo');
-  if (sellerIn) sellerIn.addEventListener('change', async e => {
-    const fs = [...(e.target.files || [])];
-    if (!fs.length) return;
-    for (const f of fs) {
-      const thumb = await compressImage(f, 360, 0.6);
-      const ocrDataUrl = await compressImage(f, 2000, 0.85).catch(() => thumb);
-      let url = '';
-      try { url = URL.createObjectURL(f); } catch (err) {}
-      sellerPendingPhotos.push({file: f, ext: extFromFile(f), thumb: thumb || url, url: url || thumb, ocrDataUrl: ocrDataUrl || thumb || url});
-    }
-    const list = $('m-seller-photo-list');
-    if (list) {
-      list.innerHTML = sellerPendingPhotos.map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-modal-photo="' + i + '" alt="Seller photo ' + (i + 1) + '">').join('');
-      bindSellerModalPhotos();
-    }
-    const rm = $('m-seller-photo-remove');
-    if (rm) rm.style.display = sellerPendingPhotos.length ? '' : 'none';
-    if (settings.apiKey) await extractSellerLinesFromPending(false);
-    e.target.value = '';
-  });
-  const rmSeller = $('m-seller-photo-remove');
-  if (rmSeller) rmSeller.onclick = () => {
-    sellerPendingPhotos.forEach(ph => { if (ph && ph.url && ph.url.startsWith('blob:')) try { URL.revokeObjectURL(ph.url); } catch (e) {} });
-    sellerPendingPhotos = [];
-    const list = $('m-seller-photo-list');
-    if (list) list.innerHTML = '';
-    rmSeller.style.display = 'none';
-  };
-  const sellerOcrBtn = $('m-seller-ocr');
-  if (sellerOcrBtn) sellerOcrBtn.onclick = async () => {
-    sellerOcrBtn.disabled = true;
-    await extractSellerLinesFromPending(true);
-    sellerOcrBtn.disabled = false;
-  };
   wireModelPicker('m-ai', 'm-ai-custom');
   bindLineTable();
   const pills = $('m-cat-pills');
@@ -892,16 +734,6 @@ function bindModal() {
   if (session.editKind === 'purchases') prefillEmptyLineCategories();
   const sumEl = $('m-item');
   if (sumEl) sumEl.addEventListener('input', () => { sumEl.dataset.autogen = '0'; });
-  bindSellerModalPhotos();
-}
-
-function bindSellerModalPhotos() {
-  document.querySelectorAll('[data-seller-modal-photo]').forEach(im => {
-    im.onclick = () => {
-      const ph = sellerPendingPhotos[Number(im.dataset.sellerModalPhoto)] || {};
-      showLightbox(ph.url || ph.thumb || '', 'Seller photo');
-    };
-  });
 }
 
 function showErr(msg) {
@@ -936,26 +768,35 @@ async function saveModal() {
     if (!n) return showErr('Enter a seller name.');
     const pr = val('m-price');
     if (pr !== '' && (!finiteNum(pr) || +pr < 0)) return showErr('Enter a valid quoted price, or leave it blank.');
-    obj = {name: n, contact: val('m-contact').trim(), item: val('m-item').trim(), price: pr === '' ? '' : +pr, status: val('m-status'), notes: val('m-notes').trim()};
-    obj.quoteLines = sellerPendingLines.length ? sellerPendingLines.slice() : (session.editing && Array.isArray(session.editing.quoteLines) ? session.editing.quoteLines.slice() : []);
-    if (sellerPendingPhotos.length) {
-      obj.photos = sellerPendingPhotos.map(ph => ({thumb: ph.thumb, url: ph.url}));
+    const quoteLines = readLinesFromTable().map(l => ({item: l.item, qty: l.qty, rate: l.rate, amount: l.amount}));
+    obj = {name: n, contact: val('m-contact').trim(), item: val('m-item').trim(), price: pr === '' ? '' : +pr, status: val('m-status'), notes: val('m-notes').trim(), quoteLines};
+    if ((obj.price === '' || obj.price == null) && quoteLines.length) {
+      const sum = sumLines(quoteLines);
+      if (sum > 0) obj.price = Math.round(sum * 100) / 100;
+    }
+    if (!obj.item && quoteLines[0]) obj.item = quoteLines[0].item || '';
+    const newPhotos = pendingPhotos();
+    if (newPhotos.length) {
+      const links = [];
       if (settings.driveToken) {
-        const links = [];
-        for (const ph of sellerPendingPhotos) {
+        for (const ph of newPhotos) {
           try {
-            const up = await uploadSellerOriginalToDrive(ph.file || ph.url, {
+            const up = await uploadSellerOriginalToDrive(ph.originalFile, {
               name: obj.name, item: obj.item, date: todayStr(), ext: ph.ext
             });
             if (up) links.push({id: up.id, webViewLink: up.webViewLink, folderPath: up.folderPath || ''});
           } catch (e) {}
         }
-        obj.photoLinks = links;
       } else {
-        obj.photoLinks = [];
+        toast('Saved on this device. Sign in to keep the original photos in Drive.');
       }
-    } else if (session.editing && Array.isArray(session.editing.photos)) {
-      obj.photos = session.editing.photos.slice();
+      obj.photoLinks = links;
+      obj.photos = newPhotos.map((ph, i) => persistablePhoto(ph, links[i]));
+    } else if (session.photoCleared) {
+      obj.photos = [];
+      obj.photoLinks = [];
+    } else if (session.editing) {
+      obj.photos = Array.isArray(session.editing.photos) ? session.editing.photos.slice() : [];
       obj.photoLinks = Array.isArray(session.editing.photoLinks) ? session.editing.photoLinks.slice() : [];
     }
   } else if (k === 'purchases') {
@@ -964,9 +805,8 @@ async function saveModal() {
     if (form.price === '' || !finiteNum(form.price) || +form.price < 0) return showErr('Enter a valid total amount.');
     const cat = form.category || '';
     const cats = (form.categories && form.categories.length) ? form.categories : (cat ? [cat] : []);
-    const pending = session.pending;
-    const pendingPhotos = pending && Array.isArray(pending.photos) ? pending.photos : [];
-    const firstPending = pendingPhotos[0] || null;
+    const album = pendingPhotos();
+    const firstPending = album[0] || null;
     const thumb = session.photoCleared ? null : ((firstPending && firstPending.thumbDataUrl) || (session.editing ? session.editing.thumb : null) || null);
     const summary = form.item || summarizePurchase(form.seller, form.lines);
     obj = {
@@ -986,14 +826,14 @@ async function saveModal() {
       const dup = state.purchases.find(x => x.id !== editId && (x.receipt || '').trim().toLowerCase() === rn && rn);
       if (dup && !confirm('Receipt #' + obj.receipt + ' already exists on ' + (dup.date || '?') + ' from ' + (dup.seller || '?') + '. Save anyway?')) return;
     }
-    if (pendingPhotos.length && settings.driveToken) {
+    if (album.length && settings.driveToken) {
       try {
         const oldIds = [];
         if (session.editing && Array.isArray(session.editing.driveFileIds)) oldIds.push(...session.editing.driveFileIds.filter(Boolean));
         else if (session.editing && session.editing.driveFileId) oldIds.push(session.editing.driveFileId);
         for (const id of oldIds) await deleteDriveFile(id);
         const uploaded = [];
-        for (const ph of pendingPhotos) {
+        for (const ph of album) {
           const link = await uploadOriginalToDrive(ph.originalFile, {
             item: obj.item, category: obj.category, seller: obj.seller, date: obj.date, receipt: obj.receipt, ext: ph.ext
           });
@@ -1009,7 +849,7 @@ async function saveModal() {
       } catch (e) {
         return showErr('Could not upload receipt photos to Drive. Enable Drive API if needed, then tap Save again. The photos are still attached.');
       }
-    } else if (pendingPhotos.length && !settings.driveToken) {
+    } else if (album.length && !settings.driveToken) {
       toast('Saved on this device. Sign in to keep the original photos in Drive.');
     } else if (session.photoCleared) {
       obj.driveLink = null; obj.driveFileId = null; obj.driveFolder = null; obj.driveFileIds = []; obj.driveFiles = [];
@@ -1027,9 +867,6 @@ async function saveModal() {
   else { obj.id = uid(); state[k].push(obj); }
   await persist(k);
   closeModal();
-  sellerPendingPhotos.forEach(ph => { if (ph && ph.url && ph.url.startsWith('blob:')) try { URL.revokeObjectURL(ph.url); } catch (e) {} });
-  sellerPendingPhotos = [];
-  sellerPendingLines = [];
   render();
   if (settings.driveToken) scheduleCsvSync();
   } catch (e) {
@@ -1169,10 +1006,8 @@ export function bindShell() {
   });
   const overlay = $('overlay');
   if (overlay) overlay.addEventListener('click', e => { if (e.target.id === 'overlay') closeModal(); });
-  const lbClose = $('lightbox-close');
-  const lightbox = $('lightbox');
-  if (lbClose && lightbox) lbClose.onclick = () => lightbox.classList.remove('show');
-  if (lightbox) lightbox.addEventListener('click', e => { if (e.target.id === 'lightbox') lightbox.classList.remove('show'); });
+  bindLightboxShell();
+  bindPhotoPreview(document);
   const openSettings = $('open-settings');
   if (openSettings) openSettings.onclick = () => {
     renderSettings();

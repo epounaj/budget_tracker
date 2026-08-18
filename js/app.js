@@ -5,16 +5,17 @@
  *   ai.js        OpenAI-compatible providers, OCR, model picker
  *   drive.js     Drive folders, original photo upload, CSV/profile sync
  *   receipts.js  camera/gallery, keep original, AI fill, user corrections
+ *   photos.js    shared album, thumbs, high-res lightbox
  *   auth.js      Google sign-in
  *   ui.js        lists, sticky Save modal, settings
  *   csv.js       export/import
  */
-import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818s';
-import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818s';
-import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818s';
-import {bindShell} from './ui.js?v=20260818s';
-import {initChat} from './chat.js?v=20260818s';
-import {appClientId} from './drive.js?v=20260818s';
+import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818t';
+import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818t';
+import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818t';
+import {bindShell} from './ui.js?v=20260818t';
+import {initChat} from './chat.js?v=20260818t';
+import {appClientId} from './drive.js?v=20260818t';
 
 try { bindShell(); } catch (e) { console.error(e); }
 try { initChat(); } catch (e) { console.error(e); }

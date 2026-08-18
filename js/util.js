@@ -1,4 +1,4 @@
-import {CATEGORIES, CUR} from './config.js?v=20260818s';
+import {CATEGORIES, CUR} from './config.js?v=20260818t';
 
 export const $ = id => document.getElementById(id);
 export const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -170,6 +170,7 @@ export function driveFolderName(raw) {
 let toastT;
 export function toast(msg, ms) {
   const t = $('toast');
+  if (!t) return;
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastT);
