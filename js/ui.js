@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818d';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818d';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818d';
-import {hub} from './hub.js?v=20260818d';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818d';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818d';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818d';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818d';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818d';
+import {TITLES, CHIP} from './config.js?v=20260818e';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818e';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818e';
+import {hub} from './hub.js?v=20260818e';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818e';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818e';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818e';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818e';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818e';
 
 function parsePurchaseLines(p) {
   if (!p) return [{item: '', qty: '', rate: '', amount: ''}];
@@ -384,7 +384,8 @@ function formBody(kind, p) {
   }
   if (kind === 'purchases') {
     p = p || {item: '', category: '', seller: '', price: '', date: todayStr(), receipt: '', thumb: null, lines: []};
-    const cur = (session.pending && (session.pending.previewUrl || session.pending.thumbDataUrl)) || p.thumb;
+    const pendingPhotos = (session.pending && Array.isArray(session.pending.photos)) ? session.pending.photos : [];
+    const cur = (pendingPhotos[0] && (pendingPhotos[0].thumbDataUrl || pendingPhotos[0].previewUrl)) || p.thumb;
     const hasKey = !!settings.apiKey;
     const lines = parsePurchaseLines(p);
     return '<div class="photo-field" style="margin-bottom:14px">' +
@@ -392,8 +393,8 @@ function formBody(kind, p) {
       '<label class="photo-btn"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Camera' +
       '<input type="file" accept="image/*" capture="environment" id="m-photo-cam" style="display:none"></label>' +
       '<label class="photo-btn"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Gallery' +
-      '<input type="file" accept="image/*" id="m-photo" style="display:none"></label></div>' +
-      '<p class="field-hint">AI reads every line on the bill into the table below. Edit anything, then Save.</p>' +
+      '<input type="file" accept="image/*" multiple id="m-photo" style="display:none"></label></div>' +
+      '<p class="field-hint">For multi-page receipts, add all photos first. AI reads every page into one table.</p>' +
       (hasKey ? '' : '<div class="inline-ai" id="inline-ai"><p>Paste your AI key once so scan can run. It is saved to your Drive profile.</p>' +
         '<div class="form-grid">' +
         '<div class="field"><label>Provider</label><select id="m-ai-provider">' + providerOptionsHtml() + '</select></div>' +
@@ -403,9 +404,9 @@ function formBody(kind, p) {
         modelPickerHtml('m-ai') + '</div>') +
       '<button type="button" class="ocr-btn" id="m-ocr" style="margin-top:10px"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>' + (hasKey ? 'Re-scan with AI' : 'Scan receipt') + '</button>' +
       '<div class="ocr-status" id="m-ocr-status"></div>' +
-      '<div class="photo-preview ' + (cur ? 'show' : '') + '" id="m-photo-preview"><img id="m-photo-img" src="' + (cur || '') + '" alt="Receipt">' +
+      '<div class="photo-preview ' + (cur ? 'show' : '') + '" id="m-photo-preview"><div class="photo-list" id="m-photo-list">' + (cur ? ('<img src="' + cur + '" alt="Receipt page 1">') : '') + '</div>' +
       '<div class="photo-preview-meta"><p class="field-hint" id="m-photo-meta">' + (cur ? 'Photo attached. Tap it to view larger.' : '') + '</p>' +
-      '<button type="button" class="photo-remove" id="m-photo-remove">Remove photo</button></div></div></div>' +
+      '<button type="button" class="photo-remove" id="m-photo-remove">Remove photos</button></div></div></div>' +
       '<div class="receipt-meta">' +
       '<div class="field"><label>Seller</label><input id="m-seller" value="' + esc(p.seller) + '" placeholder="Shop / company" autocomplete="off"></div>' +
       '<div class="field"><label>Date</label><input type="date" id="m-date" value="' + esc(p.date || todayStr()) + '"></div>' +
@@ -468,9 +469,9 @@ function bindModal() {
     saveModal();
   });
   const onFile = async e => {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    await handlePhoto(f);
+    const fs = [...(e.target.files || [])];
+    if (!fs.length) return;
+    for (const f of fs) await handlePhoto(f, true);
     await maybeScanAfterPhoto();
     e.target.value = '';
   };
@@ -478,7 +479,8 @@ function bindModal() {
   const cam = $('m-photo-cam'); if (cam) cam.addEventListener('change', onFile);
   const prm = $('m-photo-remove'); if (prm) prm.onclick = removePendingPhoto;
   const ocr = $('m-ocr'); if (ocr) ocr.onclick = startReceiptScan;
-  const img = $('m-photo-img'); if (img) img.onclick = openPhotoLightbox;
+  const imgs = $('m-photo-list');
+  if (imgs) imgs.querySelectorAll('img').forEach((img, i) => { img.onclick = () => openPhotoLightbox(i); });
   wireModelPicker('m-ai', 'm-ai-custom');
   bindLineTable();
 }
@@ -516,7 +518,9 @@ async function saveModal() {
     if (form.price === '' || !finiteNum(form.price) || +form.price < 0) return showErr('Enter a valid total amount.');
     const cat = form.category || 'Uncategorized';
     const pending = session.pending;
-    const thumb = session.photoCleared ? null : ((pending && pending.thumbDataUrl) || (session.editing ? session.editing.thumb : null) || null);
+    const pendingPhotos = pending && Array.isArray(pending.photos) ? pending.photos : [];
+    const firstPending = pendingPhotos[0] || null;
+    const thumb = session.photoCleared ? null : ((firstPending && firstPending.thumbDataUrl) || (session.editing ? session.editing.thumb : null) || null);
     obj = {
       item: form.item,
       category: cat === 'Uncategorized' && !($('m-category') && $('m-category').value.trim()) ? '' : cat,
@@ -533,24 +537,39 @@ async function saveModal() {
       const dup = state.purchases.find(x => x.id !== editId && (x.receipt || '').trim().toLowerCase() === rn && rn);
       if (dup && !confirm('Receipt #' + obj.receipt + ' already exists on ' + (dup.date || '?') + ' from ' + (dup.seller || '?') + '. Save anyway?')) return;
     }
-    if (pending && pending.originalFile && settings.driveToken) {
+    if (pendingPhotos.length && settings.driveToken) {
       try {
-        if (session.editing && session.editing.driveFileId) await deleteDriveFile(session.editing.driveFileId);
-        const link = await uploadOriginalToDrive(pending.originalFile, {
-          item: obj.item, category: obj.category, seller: obj.seller, date: obj.date, receipt: obj.receipt, ext: pending.ext
-        });
-        if (link) { obj.driveLink = link.webViewLink; obj.driveFileId = link.id; obj.driveFolder = link.folderPath || ''; }
+        const oldIds = [];
+        if (session.editing && Array.isArray(session.editing.driveFileIds)) oldIds.push(...session.editing.driveFileIds.filter(Boolean));
+        else if (session.editing && session.editing.driveFileId) oldIds.push(session.editing.driveFileId);
+        for (const id of oldIds) await deleteDriveFile(id);
+        const uploaded = [];
+        for (const ph of pendingPhotos) {
+          const link = await uploadOriginalToDrive(ph.originalFile, {
+            item: obj.item, category: obj.category, seller: obj.seller, date: obj.date, receipt: obj.receipt, ext: ph.ext
+          });
+          if (link) uploaded.push(link);
+        }
+        if (uploaded.length) {
+          obj.driveLink = uploaded[0].webViewLink;
+          obj.driveFileId = uploaded[0].id;
+          obj.driveFolder = uploaded[0].folderPath || '';
+          obj.driveFileIds = uploaded.map(x => x.id);
+          obj.driveFiles = uploaded.map((x, i) => ({id: x.id, webViewLink: x.webViewLink, folderPath: x.folderPath || '', page: i + 1}));
+        }
       } catch (e) {
-        return showErr('Could not upload the original photo to Drive. Enable Drive API if needed, then tap Save again. The photo is still attached.');
+        return showErr('Could not upload receipt photos to Drive. Enable Drive API if needed, then tap Save again. The photos are still attached.');
       }
-    } else if (pending && pending.originalFile && !settings.driveToken) {
-      toast('Saved on this device. Sign in to keep the original photo in Drive.');
+    } else if (pendingPhotos.length && !settings.driveToken) {
+      toast('Saved on this device. Sign in to keep the original photos in Drive.');
     } else if (session.photoCleared) {
-      obj.driveLink = null; obj.driveFileId = null; obj.driveFolder = null;
+      obj.driveLink = null; obj.driveFileId = null; obj.driveFolder = null; obj.driveFileIds = []; obj.driveFiles = [];
     } else if (session.editing && session.editing.driveLink) {
       obj.driveLink = session.editing.driveLink;
       obj.driveFileId = session.editing.driveFileId;
       obj.driveFolder = session.editing.driveFolder;
+      obj.driveFileIds = Array.isArray(session.editing.driveFileIds) ? session.editing.driveFileIds.slice() : (session.editing.driveFileId ? [session.editing.driveFileId] : []);
+      obj.driveFiles = Array.isArray(session.editing.driveFiles) ? session.editing.driveFiles.slice() : [];
     }
   }
   if (session.editing) Object.assign(session.editing, obj);

@@ -1,6 +1,6 @@
-import {settings, session} from './store.js?v=20260818d';
-import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc} from './util.js?v=20260818d';
-import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818d';
+import {settings, session} from './store.js?v=20260818e';
+import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc} from './util.js?v=20260818e';
+import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818e';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -12,38 +12,56 @@ export function ocrStatus(msg, err) {
 
 export function clearPendingPhoto() {
   const p = session.pending;
-  if (p && p.previewUrl) try { URL.revokeObjectURL(p.previewUrl); } catch (e) {}
+  if (p && Array.isArray(p.photos)) {
+    p.photos.forEach(ph => { if (ph && ph.previewUrl) try { URL.revokeObjectURL(ph.previewUrl); } catch (e) {} });
+  } else if (p && p.previewUrl) {
+    try { URL.revokeObjectURL(p.previewUrl); } catch (e) {}
+  }
   session.pending = null;
 }
 
 function showPreview() {
   const p = session.pending;
-  const img = $('m-photo-img'), pv = $('m-photo-preview'), meta = $('m-photo-meta');
-  if (!img || !pv || !p) return;
-  img.src = p.previewUrl || p.thumbDataUrl || '';
+  const list = $('m-photo-list'), pv = $('m-photo-preview'), meta = $('m-photo-meta');
+  if (!list || !pv || !p || !Array.isArray(p.photos) || !p.photos.length) return;
+  list.innerHTML = p.photos.map((ph, i) =>
+    '<img src="' + esc(ph.thumbDataUrl || ph.previewUrl || '') + '" data-photo-idx="' + i + '" alt="Receipt page ' + (i + 1) + '">'
+  ).join('');
+  list.querySelectorAll('[data-photo-idx]').forEach(im => {
+    im.onclick = () => openPhotoLightbox(Number(im.dataset.photoIdx || 0));
+  });
   pv.classList.add('show');
   if (meta) {
-    const name = (p.originalFile && p.originalFile.name) || 'Receipt photo';
-    const kb = p.originalFile ? Math.max(1, Math.round(p.originalFile.size / 1024)) : 0;
-    meta.textContent = kb ? ('Original photo attached · ' + name + ' · ' + kb + ' KB') : 'Photo attached — correct the table below.';
+    const files = p.photos.filter(ph => ph && ph.originalFile);
+    const kb = files.reduce((s, ph) => s + Math.max(1, Math.round((ph.originalFile.size || 0) / 1024)), 0);
+    meta.textContent = files.length
+      ? (files.length + ' photo' + (files.length === 1 ? '' : 's') + ' attached · ' + kb + ' KB total')
+      : 'Photo attached — correct the table below.';
   }
 }
 
-export async function handlePhoto(file) {
-  clearPendingPhoto();
+function firstPendingPhoto() {
+  const p = session.pending;
+  return (p && Array.isArray(p.photos) && p.photos[0]) || null;
+}
+
+export async function handlePhoto(file, append) {
+  if (!append) clearPendingPhoto();
   session.photoCleared = false;
   let previewUrl = '';
   try { previewUrl = URL.createObjectURL(file); } catch (e) {}
   let thumbDataUrl = '', ocrDataUrl = '';
   try { thumbDataUrl = await compressImage(file, 400, 0.6); } catch (e) {}
   try { ocrDataUrl = await compressImage(file, 2000, 0.85); } catch (e) {}
-  session.pending = {
+  const nextPhoto = {
     originalFile: file,
     previewUrl,
     thumbDataUrl: thumbDataUrl || previewUrl,
     ocrDataUrl: ocrDataUrl || thumbDataUrl || previewUrl,
     ext: extFromFile(file)
   };
+  if (!session.pending || !Array.isArray(session.pending.photos)) session.pending = {photos: []};
+  session.pending.photos.push(nextPhoto);
   showPreview();
 }
 
@@ -217,19 +235,33 @@ async function saveInlineAiKey() {
 
 export async function runOCR(overwrite) {
   const p = session.pending;
-  if (!p || !(p.ocrDataUrl || p.previewUrl)) { ocrStatus('Take or upload a receipt photo first.', true); return; }
+  const photos = p && Array.isArray(p.photos) ? p.photos : [];
+  if (!photos.length) { ocrStatus('Take or upload a receipt photo first.', true); return; }
   const btn = $('m-ocr');
   if (btn) btn.disabled = true;
-  ocrStatus('Reading the whole bill with ' + (settings.provider === 'custom' ? (settings.model || 'custom model') : settings.provider) + '…', false);
+  ocrStatus('Reading ' + photos.length + ' receipt page' + (photos.length === 1 ? '' : 's') + ' with ' + (settings.provider === 'custom' ? (settings.model || 'custom model') : settings.provider) + '…', false);
   try {
-    const raw = await callVisionOCR(p.ocrDataUrl || p.thumbDataUrl);
-    const result = applyOcrFields(raw, !!overwrite);
+    const merged = {seller: '', date: '', receipt: '', category: '', total: '', item: '', lines: []};
+    for (let i = 0; i < photos.length; i++) {
+      const ph = photos[i];
+      ocrStatus('Reading page ' + (i + 1) + ' of ' + photos.length + '…', false);
+      const raw = await callVisionOCR(ph.ocrDataUrl || ph.thumbDataUrl || ph.previewUrl);
+      const d = normalizeOcr(raw);
+      if (!d) continue;
+      if (!merged.seller && d.seller) merged.seller = d.seller;
+      if (!merged.date && d.date) merged.date = d.date;
+      if (!merged.receipt && d.receipt) merged.receipt = d.receipt;
+      if (!merged.category && d.category) merged.category = d.category;
+      if (!merged.item && d.item) merged.item = d.item;
+      if (Array.isArray(d.lines) && d.lines.length) merged.lines.push(...d.lines);
+    }
+    const result = applyOcrFields(merged, !!overwrite);
     const n = result && result.data && result.data.lines ? result.data.lines.length : 0;
     const who = ($('m-seller') && $('m-seller').value) || 'the receipt';
     if (!n && !($('m-seller') && $('m-seller').value) && !($('m-price') && $('m-price').value)) {
-      ocrStatus('AI could not read line items from this photo. Type them into the table, or tap Re-scan.', true);
+      ocrStatus('AI could not read line items from these photos. Type them into the table, or tap Re-scan.', true);
     } else {
-      ocrStatus('Filled the table from ' + who + (n ? (' · ' + n + ' line' + (n === 1 ? '' : 's')) : '') + '. Correct anything that’s wrong, then Save.', false);
+      ocrStatus('Filled the table from ' + who + ' · ' + photos.length + ' page' + (photos.length === 1 ? '' : 's') + (n ? (' · ' + n + ' line' + (n === 1 ? '' : 's')) : '') + '. Correct anything that’s wrong, then Save.', false);
     }
   } catch (err) {
     console.error(err);
@@ -262,11 +294,12 @@ export async function startReceiptScan() {
   const inp = document.createElement('input');
   inp.type = 'file';
   inp.accept = 'image/*';
-  inp.capture = 'environment';
+  inp.multiple = true;
   inp.onchange = async e => {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    await handlePhoto(f);
+    const fs = [...(e.target.files || [])];
+    if (!fs.length) return;
+    clearPendingPhoto();
+    for (const f of fs) await handlePhoto(f, true);
     await runOCR(true);
   };
   inp.click();
@@ -277,12 +310,15 @@ export function removePendingPhoto() {
   session.photoCleared = true;
   const pv = $('m-photo-preview');
   if (pv) pv.classList.remove('show');
+  const list = $('m-photo-list');
+  if (list) list.innerHTML = '';
   ['m-photo', 'm-photo-cam'].forEach(id => { const el = $(id); if (el) el.value = ''; });
 }
 
-export function openPhotoLightbox() {
+export function openPhotoLightbox(idx) {
   const p = session.pending;
-  const src = (p && (p.previewUrl || p.thumbDataUrl)) || '';
+  const ph = (p && Array.isArray(p.photos) && p.photos[idx || 0]) || firstPendingPhoto();
+  const src = (ph && (ph.previewUrl || ph.thumbDataUrl)) || '';
   if (!src) return;
   $('lightbox-img').src = src;
   $('lightbox').classList.add('show');

@@ -1,4 +1,4 @@
-import {CATEGORIES, CUR} from './config.js?v=20260818d';
+import {CATEGORIES, CUR} from './config.js?v=20260818e';
 
 export const $ = id => document.getElementById(id);
 export const todayStr = () => new Date().toISOString().slice(0, 10);
