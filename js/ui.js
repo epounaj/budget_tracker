@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818h';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818h';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818h';
-import {hub} from './hub.js?v=20260818h';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818h';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818h';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818h';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818h';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818h';
+import {TITLES, CHIP} from './config.js?v=20260818i';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818i';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818i';
+import {hub} from './hub.js?v=20260818i';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818i';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818i';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818i';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818i';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818i';
 
 let sellerPendingPhotos = [];
 
@@ -70,6 +70,37 @@ function renderDashboard() {
     '<div><p class="stat-label"><span class="stat-dot" style="background:var(--accent)"></span>Pending</p><p class="stat-value" id="stat-pending">' + state.actions.filter(a => a.status !== 'done').length + '</p></div>' +
     '</div></div>';
 
+  // Smart insights
+  const now = Date.now();
+  const d30 = now - 30 * 86400000;
+  const d60 = now - 60 * 86400000;
+  const spend30 = state.purchases.filter(p => {
+    const t = p.date ? new Date(p.date).getTime() : 0;
+    return t >= d30 && t <= now;
+  }).reduce((s, p) => s + purchaseTotal(p), 0);
+  const spendPrev30 = state.purchases.filter(p => {
+    const t = p.date ? new Date(p.date).getTime() : 0;
+    return t >= d60 && t < d30;
+  }).reduce((s, p) => s + purchaseTotal(p), 0);
+  const trendPct = spendPrev30 > 0 ? ((spend30 - spendPrev30) / spendPrev30) * 100 : 0;
+  const topCat = Object.entries(state.purchases.reduce((acc, p) => {
+    const c = (p.category || 'Uncategorized').trim();
+    acc[c] = (acc[c] || 0) + purchaseTotal(p);
+    return acc;
+  }, {})).sort((a, b) => b[1] - a[1])[0];
+  const topSeller = Object.entries(state.purchases.reduce((acc, p) => {
+    const s = (p.seller || '').trim();
+    if (!s) return acc;
+    acc[s] = (acc[s] || 0) + purchaseTotal(p);
+    return acc;
+  }, {})).sort((a, b) => b[1] - a[1])[0];
+  html += '<div class="dash-section"><p class="dash-title">Smart insights</p><div class="insights-grid">' +
+    '<div class="insight-card"><p class="k">30d spend</p><p class="v">' + money(spend30) + '</p></div>' +
+    '<div class="insight-card"><p class="k">30d trend</p><p class="v ' + (trendPct > 0 ? 'bad' : 'good') + '">' + (spendPrev30 ? ((trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '%') : '—') + '</p></div>' +
+    '<div class="insight-card"><p class="k">Top category</p><p class="v">' + esc(topCat ? topCat[0] : '—') + '</p><p class="s">' + money(topCat ? topCat[1] : 0) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Top seller</p><p class="v">' + esc(topSeller ? topSeller[0] : '—') + '</p><p class="s">' + money(topSeller ? topSeller[1] : 0) + '</p></div>' +
+    '</div></div>';
+
   // Loan disbursement alerts
   html += '<div class="dash-section"><p class="dash-title">Fund health</p>';
   if (spent > 0) {
@@ -81,7 +112,7 @@ function renderDashboard() {
     html += '<div class="alert-card green"><p class="alert-title">🟢 Funds healthy</p><p class="alert-body">No spending recorded yet.</p></div>';
   }
   // Runway projection
-  const now = Date.now(), thirtyDaysAgo = now - 30 * 86400000;
+  const thirtyDaysAgo = now - 30 * 86400000;
   const recentSpend = state.purchases.filter(p => {
     const d = p.date ? new Date(p.date).getTime() : 0;
     return d >= thirtyDaysAgo && d <= now;

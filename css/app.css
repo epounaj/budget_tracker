@@ -234,6 +234,81 @@ a.set-btn:hover{background:var(--line);}
 #chat-input:focus{outline:none;border-color:var(--accent);}
 .chat-send-btn{font-family:inherit;font-weight:550;font-size:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px 18px;cursor:pointer;}
 .chat-send-btn:disabled{opacity:.5;cursor:default;}
+
+/* Visual refresh */
+body{
+  background:
+    radial-gradient(1000px 300px at 50% -220px, rgba(47,110,79,.16), transparent 70%),
+    linear-gradient(180deg, #f8faf8 0%, #f6f7f6 46%, #f5f6f5 100%);
+}
+.summary,.entry,.action-row,.purchase-table-wrap,.dash-section .dash-table,.modal,.login-card{
+  box-shadow:0 8px 28px rgba(16,24,40,.06);
+}
+.summary{
+  border:1px solid #e4ece7;
+  background:linear-gradient(180deg,#ffffff 0%,#fbfdfc 100%);
+}
+.tabs{
+  border:1px solid #e6ebe7;
+  background:linear-gradient(180deg,#f6f8f7,#f1f4f2);
+}
+.tab-btn{
+  color:#5d6961;
+}
+.tab-btn.active{
+  background:#fff;
+  color:#1c3d2b;
+  box-shadow:0 2px 8px rgba(24,64,43,.12);
+}
+.add-btn{
+  background:linear-gradient(180deg,#202523,#121716);
+  box-shadow:0 4px 12px rgba(14,19,17,.22);
+}
+.panel-title{
+  letter-spacing:-.01em;
+}
+.entry,.action-row,.purchase-table-wrap,.dash-section .dash-table{
+  border-color:#e6ece8;
+  background:#fff;
+}
+.icon-btn{
+  border-color:#d9e1db;
+}
+.icon-btn:hover{
+  background:#f2f7f4;
+}
+.dash-title{
+  font-size:15px;
+  letter-spacing:-.01em;
+}
+.dash-section{
+  background:#fff;
+  border:1px solid #e8eeea;
+  border-radius:12px;
+  padding:14px;
+}
+.insights-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+}
+.insight-card{
+  border:1px solid #e4ece7;
+  border-radius:10px;
+  padding:10px 12px;
+  background:linear-gradient(180deg,#ffffff,#f8fbf9);
+}
+.insight-card .k{margin:0;font-size:11px;color:#5d6961;font-weight:600;}
+.insight-card .v{margin:4px 0 0;font-size:17px;font-weight:700;letter-spacing:-.01em;}
+.insight-card .v.good{color:#2f6e4f;}
+.insight-card .v.bad{color:#c4553a;}
+.insight-card .s{margin:2px 0 0;font-size:12px;color:#6b6b6b;}
+.purchase-table th{
+  background:#f4f8f6;
+}
+.chat-panel{
+  border-left:1px solid #e3ece6;
+}
 @media (max-width:560px){
   .avail-value{font-size:28px;}
   .stat-grid{grid-template-columns:repeat(2,1fr);gap:14px 12px;}
@@ -251,4 +326,5 @@ a.set-btn:hover{background:var(--line);}
   .dash-table{font-size:12px;}
   .dash-table th,.dash-table td{padding:6px 4px;}
   .chat-panel{width:100vw;}
+  .insights-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
