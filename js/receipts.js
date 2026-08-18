@@ -1,10 +1,10 @@
-import {settings, session} from './store.js?v=20260818t';
-import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame} from './util.js?v=20260818t';
-import {CATEGORIES} from './config.js?v=20260818t';
-import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260818t';
-import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260818t';
+import {settings, session} from './store.js?v=20260818u';
+import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame} from './util.js?v=20260818u';
+import {CATEGORIES} from './config.js?v=20260818u';
+import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260818u';
+import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260818u';
 
-export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260818t';
+export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260818u';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -18,11 +18,29 @@ function photoNoun() {
   return session.editKind === 'sellers' ? 'quote' : 'receipt';
 }
 
-function emptyLine() { return {item: '', qty: '', rate: '', amount: '', category: ''}; }
+function emptyLine() { return {item: '', qty: '', rate: '', amount: '', category: '', seller: '', contact: ''}; }
 
 function tableHasCat() {
   const body = $('m-lines');
   return !(body && body.getAttribute('data-skip-cat') === '1');
+}
+
+function tableHasSeller() {
+  const body = $('m-lines');
+  return !!(body && body.getAttribute('data-with-seller') === '1');
+}
+
+export function sellerNameKey(name) {
+  return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function mergeContact(a, b) {
+  const x = String(a || '').trim();
+  const y = String(b || '').trim();
+  if (!x) return y;
+  if (!y || x === y || x.toLowerCase().includes(y.toLowerCase())) return x;
+  if (y.toLowerCase().includes(x.toLowerCase())) return y;
+  return x + ' · ' + y;
 }
 
 function catSelectHtml(selected) {
@@ -100,12 +118,16 @@ function normalizeLine(ln) {
   const amount = parseMoney(ln.amount ?? ln.total ?? ln.line_total ?? ln.lineTotal);
   const rate = parseMoney(ln.rate ?? ln.unit_price ?? ln.unitPrice ?? ln.price);
   const qty = ln.qty != null && ln.qty !== '' ? ln.qty : (ln.quantity != null ? ln.quantity : '');
+  const photoIndex = ln.photoIndex != null && ln.photoIndex !== '' ? Number(ln.photoIndex) : '';
   const line = {
     item: String(ln.item || ln.description || ln.name || ln.product || '').trim(),
     qty,
     rate: rate === '' ? '' : rate,
     amount: amount === '' ? '' : amount,
-    category: normalizeCategory(ln.category || ln.cat || '')
+    category: normalizeCategory(ln.category || ln.cat || ''),
+    seller: String(ln.seller || ln.vendor || ln.store || ln.shop || '').trim(),
+    contact: String(ln.contact || ln.phone || ln.tel || ln.mobile || ln.whatsapp || ln.email || '').trim(),
+    photoIndex: photoIndex === '' || Number.isNaN(photoIndex) ? '' : photoIndex
   };
   const computed = lineAmount(line);
   if (computed) line.amount = computed;
@@ -118,9 +140,10 @@ export function normalizeOcr(data) {
   if (typeof data !== 'object') return null;
   let lines = data.lines || data.items || data.products || data.details || [];
   if (!Array.isArray(lines)) lines = [];
-  lines = lines.map(normalizeLine).filter(l => l.item || l.amount !== '');
+  lines = lines.map(normalizeLine).filter(l => l.item || l.amount !== '' || l.seller);
   const total = parseMoney(data.total ?? data.grand_total ?? data.grandTotal ?? data.amount ?? data.net_amount);
   const seller = String(data.seller || data.vendor || data.store || data.merchant || data.shop || data.company || '').trim();
+  const contact = String(data.contact || data.phone || data.tel || data.mobile || data.whatsapp || data.email || '').trim();
   const receipt = String(data.receipt || data.invoice || data.invoice_no || data.invoice_number || data.bill_no || data.receipt_no || '').trim();
   const date = parseDateISO(data.date || data.invoice_date || data.bill_date || data.dated);
   const fromLines = [...new Set(lines.map(l => l.category).filter(Boolean))];
@@ -140,13 +163,21 @@ export function normalizeOcr(data) {
   });
   categories = [...new Set(categories.concat(lines.map(l => l.category).filter(Boolean)))];
   const item = String(data.summary || data.item || '').trim() || summarizePurchase(seller, lines);
-  return {seller, date, receipt, category: categories[0] || '', categories, total, item, lines};
+  if (seller) lines.forEach(l => { if (!l.seller) l.seller = seller; });
+  if (contact) lines.forEach(l => { if (!l.contact) l.contact = contact; });
+  return {seller, contact, date, receipt, category: categories[0] || '', categories, total, item, lines};
 }
 
-function lineRowHtml(ln, withCat) {
+function lineRowHtml(ln, withCat, withSeller) {
   ln = ln || emptyLine();
   if (withCat == null) withCat = tableHasCat();
-  return '<tr>' +
+  if (withSeller == null) withSeller = tableHasSeller();
+  const photoAttr = (ln.photoIndex !== '' && ln.photoIndex != null) ? (' data-photo="' + esc(ln.photoIndex) + '"') : '';
+  return '<tr' + photoAttr + '>' +
+    (withSeller
+      ? ('<td class="col-seller"><input class="ln-seller" value="' + esc(ln.seller) + '" placeholder="Seller" autocomplete="off"></td>' +
+         '<td class="col-contact"><input class="ln-contact" value="' + esc(ln.contact) + '" placeholder="Contact" autocomplete="off"></td>')
+      : '') +
     '<td class="col-item"><input class="ln-item" value="' + esc(ln.item) + '" placeholder="Item" autocomplete="off"></td>' +
     '<td class="col-qty"><input class="ln-qty" value="' + esc(ln.qty) + '" placeholder="Qty" inputmode="decimal"></td>' +
     '<td class="col-rate"><input class="ln-rate" value="' + esc(ln.rate) + '" placeholder="Rate" inputmode="decimal"></td>' +
@@ -158,11 +189,15 @@ function lineRowHtml(ln, withCat) {
 
 export function purchaseLinesHtml(lines, opts) {
   const skip = !!(opts && opts.skipCategory);
+  const withSeller = !!(opts && opts.withSeller);
   const rows = (lines && lines.length) ? lines : [emptyLine()];
   return '<div class="receipt-table-wrap">' +
-    '<table class="receipt-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th>' +
+    '<table class="receipt-table' + (withSeller ? ' with-seller' : '') + '"><thead><tr>' +
+    (withSeller ? '<th>Seller</th><th>Contact</th>' : '') +
+    '<th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th>' +
     (skip ? '' : '<th>Category</th>') + '<th></th></tr></thead>' +
-    '<tbody id="m-lines"' + (skip ? ' data-skip-cat="1"' : '') + '>' + rows.map(ln => lineRowHtml(ln, !skip)).join('') + '</tbody></table></div>' +
+    '<tbody id="m-lines"' + (skip ? ' data-skip-cat="1"' : '') + (withSeller ? ' data-with-seller="1"' : '') + '>' +
+    rows.map(ln => lineRowHtml(ln, !skip, withSeller)).join('') + '</tbody></table></div>' +
     '<button type="button" class="line-add" id="m-line-add">+ Add row</button>';
 }
 
@@ -177,20 +212,32 @@ export function readLinesFromTable() {
       amount: parseMoney(tr.querySelector('.ln-amount') && tr.querySelector('.ln-amount').value),
       category: normalizeCategory(tr.querySelector('.ln-cat') && tr.querySelector('.ln-cat').value)
     };
+    const sellerEl = tr.querySelector('.ln-seller');
+    if (sellerEl) {
+      row.seller = sellerEl.value.trim();
+      row.contact = (tr.querySelector('.ln-contact') && tr.querySelector('.ln-contact').value.trim()) || '';
+      if (tr.dataset.photo !== undefined && tr.dataset.photo !== '') row.photoIndex = tr.dataset.photo;
+    }
     const computed = lineAmount(row);
     if (computed) row.amount = computed;
     return row;
-  }).filter(l => l.item || l.amount !== '');
+  }).filter(l => l.item || l.amount !== '' || l.seller);
 }
 
 function syncTotalFromLines() {
   const totalEl = $('m-price');
   if (!totalEl) return;
+  if (tableHasSeller()) {
+    const fallback = ($('m-name') && $('m-name').value) || '';
+    const names = new Set(readLinesFromTable().map(l => sellerNameKey(l.seller || fallback)).filter(Boolean));
+    if (names.size > 1) return;
+  }
   const sum = sumLines(readLinesFromTable());
   if (sum) totalEl.value = String(Math.round(sum * 100) / 100);
 }
 
 function fillSummaryFromLines() {
+  if (tableHasSeller()) return;
   const itemEl = $('m-item');
   if (!itemEl) return;
   const lines = readLinesFromTable();
@@ -217,7 +264,12 @@ export function bindLineTable() {
     add.onclick = () => {
       const tb = $('m-lines');
       if (!tb) return;
-      tb.insertAdjacentHTML('beforeend', lineRowHtml(emptyLine(), tableHasCat()));
+      const ln = emptyLine();
+      if (tableHasSeller()) {
+        ln.seller = ($('m-name') && $('m-name').value.trim()) || '';
+        ln.contact = ($('m-contact') && $('m-contact').value.trim()) || '';
+      }
+      tb.insertAdjacentHTML('beforeend', lineRowHtml(ln, tableHasCat()));
     };
   }
   if (!body || body._lineBound) return;
@@ -263,6 +315,7 @@ export function applyOcrFields(raw, overwrite) {
   const filled = [];
   if (set('m-seller', data.seller)) filled.push('seller');
   if (set('m-name', data.seller)) filled.push('name');
+  if (set('m-contact', data.contact)) filled.push('contact');
   if (data.date) {
     const dEl = $('m-date');
     if (dEl && (overwrite || !String(dEl.value || '').trim())) { dEl.value = data.date; filled.push('date'); }
@@ -280,15 +333,16 @@ export function applyOcrFields(raw, overwrite) {
   const stillEmpty = readLinesFromTable().some(l => l.item && !l.category);
   if (overwrite && !stillEmpty) syncPillsFromLines();
   else turnOnPillsFromLines();
+  const manySellers = [...new Set((data.lines || []).map(l => l.seller).filter(Boolean))].length > 1;
   const sum = sumLines(data.lines);
   const total = data.total !== '' && data.total != null ? data.total : sum;
-  if (total !== '' && $('m-price') && (overwrite || !String($('m-price').value || '').trim())) {
+  if (!manySellers && total !== '' && $('m-price') && (overwrite || !String($('m-price').value || '').trim())) {
     $('m-price').value = total;
     filled.push('total');
   }
   const summary = data.item || summarizePurchase(data.seller, data.lines);
   const itemEl = $('m-item');
-  if (itemEl && summary && (overwrite || !String(itemEl.value || '').trim() || itemEl.dataset.autogen === '1')) {
+  if (!manySellers && itemEl && summary && (overwrite || !String(itemEl.value || '').trim() || itemEl.dataset.autogen === '1')) {
     itemEl.value = summary;
     itemEl.dataset.autogen = '1';
     filled.push('summary');
@@ -433,19 +487,33 @@ async function saveInlineAiKey() {
 export async function runOCR(overwrite) {
   const photos = pendingPhotos();
   const noun = photoNoun();
+  const isSeller = session.editKind === 'sellers';
   if (!photos.length) { ocrStatus('Take or upload a ' + noun + ' photo first.', true); return; }
   const btn = $('m-ocr');
   if (btn) btn.disabled = true;
   ocrStatus('Reading ' + photos.length + ' ' + noun + ' page' + (photos.length === 1 ? '' : 's') + ' with ' + (settings.provider === 'custom' ? (settings.model || 'custom model') : settings.provider) + '…', false);
   try {
-    const merged = {seller: '', date: '', receipt: '', category: '', categories: [], total: '', item: '', lines: []};
+    const extra = isSeller
+      ? 'This photo may be a supplier quote. Always fill "seller" and "contact" for THIS photo only. Different photos can be different shops.'
+      : '';
+    const merged = {seller: '', contact: '', date: '', receipt: '', category: '', categories: [], total: '', item: '', lines: []};
     for (let i = 0; i < photos.length; i++) {
       const ph = photos[i];
       ocrStatus('Reading page ' + (i + 1) + ' of ' + photos.length + '…', false);
-      const raw = await callVisionOCR(ocrSrc(ph));
+      const raw = await callVisionOCR(ocrSrc(ph), extra);
       const d = normalizeOcr(raw);
       if (!d) continue;
+      if (ph) {
+        ph.ocrSeller = d.seller || '';
+        ph.ocrContact = d.contact || '';
+      }
+      (d.lines || []).forEach(l => {
+        if (!l.seller) l.seller = d.seller || '';
+        if (!l.contact) l.contact = d.contact || '';
+        l.photoIndex = i;
+      });
       if (!merged.seller && d.seller) merged.seller = d.seller;
+      if (!merged.contact && d.contact) merged.contact = d.contact;
       if (!merged.date && d.date) merged.date = d.date;
       if (!merged.receipt && d.receipt) merged.receipt = d.receipt;
       if (!merged.category && d.category) merged.category = d.category;
@@ -453,13 +521,34 @@ export async function runOCR(overwrite) {
       if (!merged.item && d.item) merged.item = d.item;
       if (Array.isArray(d.lines) && d.lines.length) merged.lines.push(...d.lines);
     }
+    if (isSeller) {
+      photos.forEach((ph, i) => {
+        if (!ph || !ph.ocrSeller) return;
+        if (merged.lines.some(l => Number(l.photoIndex) === i)) return;
+        merged.lines.push({
+          item: '', qty: '', rate: '', amount: '', category: '',
+          seller: ph.ocrSeller, contact: ph.ocrContact || '', photoIndex: i
+        });
+      });
+    }
+    const sellerNames = [...new Set(
+      merged.lines.map(l => l.seller).concat(photos.map(ph => ph && ph.ocrSeller)).filter(Boolean)
+    )];
+    if (isSeller) {
+      merged.seller = sellerNames.length === 1 ? sellerNames[0] : '';
+      const contacts = [...new Set(merged.lines.map(l => l.contact).concat(photos.map(ph => ph && ph.ocrContact)).filter(Boolean))];
+      merged.contact = contacts.length === 1 ? contacts[0] : '';
+      if (sellerNames.length > 1) merged.item = ($('m-item') && String($('m-item').value || '').trim()) || '';
+    }
     merged.categories = [...new Set(merged.categories.concat(merged.lines.map(l => l.category)).filter(Boolean))];
     if (!merged.item) merged.item = summarizePurchase(merged.seller, merged.lines);
     const result = applyOcrFields(merged, !!overwrite);
     const n = result && result.data && result.data.lines ? result.data.lines.length : 0;
     const who = ($('m-seller') && $('m-seller').value) || ($('m-name') && $('m-name').value) || ('the ' + noun);
-    if (!n && !($('m-seller') && $('m-seller').value) && !($('m-name') && $('m-name').value) && !($('m-price') && $('m-price').value)) {
+    if (!n && !($('m-seller') && $('m-seller').value) && !($('m-name') && $('m-name').value) && !sellerNames.length && !($('m-price') && $('m-price').value)) {
       ocrStatus('AI could not read line items from these photos. Type them into the table, or tap Re-scan.', true);
+    } else if (isSeller && sellerNames.length > 1) {
+      ocrStatus('Found ' + sellerNames.length + ' shops in ' + photos.length + ' photos · ' + n + ' line' + (n === 1 ? '' : 's') + '. Name and contact are on each row. Save creates one seller per shop.', false);
     } else {
       ocrStatus('Filled the table from ' + who + ' · ' + photos.length + ' page' + (photos.length === 1 ? '' : 's') + (n ? (' · ' + n + ' line' + (n === 1 ? '' : 's')) : '') + '. Correct anything that’s wrong, then Save.', false);
     }
@@ -503,6 +592,47 @@ export async function startReceiptScan() {
     await runOCR(true);
   };
   inp.click();
+}
+
+export function readSellerQuoteGroups(defaults) {
+  const fallbackName = (defaults && defaults.name) || '';
+  const fallbackContact = (defaults && defaults.contact) || '';
+  const groups = [];
+  const indexByKey = new Map();
+  const unnamed = [];
+  readLinesFromTable().forEach(l => {
+    const name = String(l.seller || fallbackName).trim();
+    const contact = String(l.contact || fallbackContact).trim();
+    const key = sellerNameKey(name);
+    const photoRaw = l.photoIndex;
+    const photoIndex = photoRaw !== '' && photoRaw != null && !Number.isNaN(Number(photoRaw)) ? Number(photoRaw) : '';
+    const line = {
+      item: l.item, qty: l.qty, rate: l.rate, amount: l.amount,
+      seller: name, contact
+    };
+    if (!key) {
+      unnamed.push(line);
+      return;
+    }
+    if (!indexByKey.has(key)) {
+      indexByKey.set(key, groups.length);
+      groups.push({key, name, contact, lines: [], photoIndexes: []});
+    }
+    const g = groups[indexByKey.get(key)];
+    g.contact = mergeContact(g.contact, contact);
+    g.lines.push(line);
+    if (photoIndex !== '') g.photoIndexes.push(photoIndex);
+  });
+  if (unnamed.length && groups.length) {
+    const g = groups[0];
+    unnamed.forEach(line => {
+      line.seller = g.name;
+      line.contact = line.contact || g.contact;
+      g.lines.push(line);
+    });
+    unnamed.length = 0;
+  }
+  return {groups, unnamed};
 }
 
 export function readPurchaseForm() {

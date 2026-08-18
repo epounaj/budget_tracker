@@ -1,13 +1,13 @@
-import {TITLES, CHIP} from './config.js?v=20260818t';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818t';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260818t';
-import {hub} from './hub.js?v=20260818t';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818t';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260818t';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260818t';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818t';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818t';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818t';
+import {TITLES, CHIP} from './config.js?v=20260818u';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818u';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260818u';
+import {hub} from './hub.js?v=20260818u';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818u';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260818u';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260818u';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818u';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818u';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818u';
 
 let sellerItemSearch = '';
 let saveBusy = false;
@@ -294,7 +294,8 @@ function sellerQuoteRows() {
     const lines = Array.isArray(s.quoteLines) ? s.quoteLines : [];
     lines.forEach(l => quoteRows.push({
       sellerId: s.id,
-      seller: s.name || '',
+      seller: l.seller || s.name || '',
+      contact: l.contact || s.contact || '',
       item: l.item || '',
       qty: l.qty,
       rate: Number(l.rate) || 0,
@@ -311,6 +312,7 @@ function filterSellerQuotes(rows, query) {
   return rows.filter(r =>
     String(r.item || '').toLowerCase().includes(q) ||
     String(r.seller || '').toLowerCase().includes(q) ||
+    String(r.contact || '').toLowerCase().includes(q) ||
     String(r.status || '').toLowerCase().includes(q)
   );
 }
@@ -612,25 +614,28 @@ function formBody(kind, p) {
     p = p || {name: '', contact: '', item: '', price: '', status: 'shortlisted', notes: '', photos: [], photoLinks: [], quoteLines: []};
     const hasKey = !!settings.apiKey;
     const photos = existingFormPhotos(p, 'sellers');
-    const lines = Array.isArray(p.quoteLines) && p.quoteLines.length ? p.quoteLines : [];
+    const lines = (Array.isArray(p.quoteLines) && p.quoteLines.length ? p.quoteLines : []).map(l => Object.assign({}, l, {
+      seller: l.seller || p.name || '',
+      contact: l.contact || p.contact || ''
+    }));
     return photoFieldHtml({
       photos, hasKey,
       kind: 'seller', recordId: p.id || '', alt: 'Seller photo',
-      hint: 'Add quote screenshots or storefront photos first. AI reads every page into one table.',
+      hint: 'Each quote photo can be a different shop. AI fills seller name and contact on every line.',
       ocrLabel: hasKey ? 'Re-scan with AI' : 'Extract with AI',
       extraHtml: hasKey ? '' : inlineAiHtml()
     }) +
       '<div class="receipt-meta">' +
-      '<div class="field"><label class="req">Name</label><input id="m-name" value="' + esc(p.name) + '" placeholder="e.g. ABC Hardware" autocomplete="off"></div>' +
-      '<div class="field"><label>Contact</label><input id="m-contact" value="' + esc(p.contact) + '" placeholder="Optional" autocomplete="off"></div>' +
+      '<div class="field"><label>Name</label><input id="m-name" value="' + esc(p.name) + '" placeholder="Default if a row is blank" autocomplete="off"></div>' +
+      '<div class="field"><label>Contact</label><input id="m-contact" value="' + esc(p.contact) + '" placeholder="Default if a row is blank" autocomplete="off"></div>' +
       '<div class="field"><label>Status</label><select id="m-status">' +
       '<option value="shortlisted"' + (p.status === 'shortlisted' ? ' selected' : '') + '>Shortlisted</option>' +
       '<option value="contacted"' + (p.status === 'contacted' ? ' selected' : '') + '>Contacted</option>' +
       '<option value="selected"' + (p.status === 'selected' ? ' selected' : '') + '>Selected</option>' +
       '<option value="rejected"' + (p.status === 'rejected' ? ' selected' : '') + '>Rejected</option></select></div>' +
       '<div class="field"><label>For</label><input list="category-options" id="m-item" value="' + esc(p.item) + '" placeholder="e.g. Roof tiles"></div></div>' +
-      '<p class="field-hint receipt-table-label">Quote line items — AI fills this; tap a cell to correct.</p>' +
-      purchaseLinesHtml(lines, {skipCategory: true}) +
+      '<p class="field-hint receipt-table-label">Quote line items — each row can be a different shop. AI fills this; tap a cell to correct.</p>' +
+      purchaseLinesHtml(lines, {skipCategory: true, withSeller: true}) +
       '<div class="receipt-total-row">' +
       '<div class="field"><label>Quoted (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="' + esc(p.price) + '" placeholder="Optional"></div></div>' +
       '<div class="field wide" style="margin-top:12px"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div>';
@@ -675,7 +680,7 @@ export function openModal(kind, rec) {
     funds: 'How much came in, and from where.',
     budget: 'A category and the amount you planned for it.',
     actions: 'One thing still to do. Due date is optional.',
-    sellers: 'Snap or pick a quote photo. AI fills the line table. You can still correct anything.',
+    sellers: 'Snap or pick quote photos. Each photo can be a different shop — AI fills name, contact, and lines.',
     purchases: 'Snap or pick a receipt. AI fills items, categories, and a short label. You can still correct anything.'
   }[kind];
   const modal = $('modal');
@@ -743,6 +748,55 @@ function showErr(msg) {
   e.classList.add('show');
 }
 
+async function attachSellerPhotos(obj, photos) {
+  const list = (photos || []).filter(Boolean);
+  if (!list.length) return;
+  const links = [];
+  if (settings.driveToken) {
+    for (const ph of list) {
+      if (!ph.originalFile) {
+        links.push({
+          id: ph.driveFileId || '',
+          webViewLink: ph.webViewLink || '',
+          folderPath: ''
+        });
+        continue;
+      }
+      try {
+        const up = await uploadSellerOriginalToDrive(ph.originalFile, {
+          name: obj.name, item: obj.item, date: todayStr(), ext: ph.ext
+        });
+        links.push(up ? {id: up.id, webViewLink: up.webViewLink, folderPath: up.folderPath || ''} : {});
+      } catch (e) {
+        links.push({});
+      }
+    }
+  }
+  obj.photoLinks = links.filter(ln => ln && (ln.id || ln.webViewLink));
+  obj.photos = list.map((ph, i) => persistablePhoto(ph, links[i]));
+}
+
+function sellerRecordFromGroup(g, shared) {
+  const quoteLines = (g.lines || []).map(l => ({
+    item: l.item, qty: l.qty, rate: l.rate, amount: l.amount,
+    seller: l.seller || g.name, contact: l.contact || g.contact
+  })).filter(l => l.item || l.amount !== '');
+  let price = shared.priceOverride;
+  if (price === undefined || price === '' || price == null) {
+    const sum = sumLines(quoteLines);
+    price = sum > 0 ? Math.round(sum * 100) / 100 : '';
+  }
+  return {
+    name: g.name,
+    contact: g.contact || shared.contact || '',
+    item: shared.item || (quoteLines[0] && quoteLines[0].item) || '',
+    price,
+    status: shared.status,
+    notes: shared.notes,
+    quoteLines
+  };
+}
+
 async function saveModal() {
   if (saveBusy) return;
   const k = session.editKind, val = id => { const el = $(id); return el ? el.value : ''; };
@@ -750,6 +804,8 @@ async function saveModal() {
   const editing = session.editing;
   setSaveBusy(true);
   let obj;
+  let extraSellers = [];
+  let sellerBatchNote = '';
   try {
   if (k === 'funds') {
     const a = val('m-amount');
@@ -765,39 +821,77 @@ async function saveModal() {
     obj = {title: t, due: val('m-due'), status: val('m-status'), notes: val('m-notes').trim()};
   } else if (k === 'sellers') {
     const n = val('m-name').trim();
-    if (!n) return showErr('Enter a seller name.');
+    const c = val('m-contact').trim();
     const pr = val('m-price');
     if (pr !== '' && (!finiteNum(pr) || +pr < 0)) return showErr('Enter a valid quoted price, or leave it blank.');
-    const quoteLines = readLinesFromTable().map(l => ({item: l.item, qty: l.qty, rate: l.rate, amount: l.amount}));
-    obj = {name: n, contact: val('m-contact').trim(), item: val('m-item').trim(), price: pr === '' ? '' : +pr, status: val('m-status'), notes: val('m-notes').trim(), quoteLines};
-    if ((obj.price === '' || obj.price == null) && quoteLines.length) {
-      const sum = sumLines(quoteLines);
-      if (sum > 0) obj.price = Math.round(sum * 100) / 100;
-    }
-    if (!obj.item && quoteLines[0]) obj.item = quoteLines[0].item || '';
-    const newPhotos = pendingPhotos();
-    if (newPhotos.length) {
-      const links = [];
-      if (settings.driveToken) {
-        for (const ph of newPhotos) {
-          try {
-            const up = await uploadSellerOriginalToDrive(ph.originalFile, {
-              name: obj.name, item: obj.item, date: todayStr(), ext: ph.ext
-            });
-            if (up) links.push({id: up.id, webViewLink: up.webViewLink, folderPath: up.folderPath || ''});
-          } catch (e) {}
-        }
-      } else {
-        toast('Saved on this device. Sign in to keep the original photos in Drive.');
+    const {groups, unnamed} = readSellerQuoteGroups({name: n, contact: c});
+    if (unnamed.length) return showErr('Every quote row needs a seller name, or fill Name at the top.');
+    if (!n && !groups.length) return showErr('Enter a seller name, or add it on a quote row.');
+    const shared = {contact: c, item: val('m-item').trim(), status: val('m-status'), notes: val('m-notes').trim()};
+    const pending = pendingPhotos();
+
+    const keepExistingPhotos = () => {
+      if (session.photoCleared) {
+        obj.photos = [];
+        obj.photoLinks = [];
+      } else if (editing) {
+        obj.photos = Array.isArray(editing.photos) ? editing.photos.slice() : [];
+        obj.photoLinks = Array.isArray(editing.photoLinks) ? editing.photoLinks.slice() : [];
       }
-      obj.photoLinks = links;
-      obj.photos = newPhotos.map((ph, i) => persistablePhoto(ph, links[i]));
-    } else if (session.photoCleared) {
-      obj.photos = [];
-      obj.photoLinks = [];
-    } else if (session.editing) {
-      obj.photos = Array.isArray(session.editing.photos) ? session.editing.photos.slice() : [];
-      obj.photoLinks = Array.isArray(session.editing.photoLinks) ? session.editing.photoLinks.slice() : [];
+    };
+
+    if (!groups.length) {
+      obj = sellerRecordFromGroup({name: n, contact: c, lines: []}, Object.assign({}, shared, {priceOverride: pr === '' ? '' : +pr}));
+      if (pending.length) {
+        await attachSellerPhotos(obj, pending);
+        if (!settings.driveToken) toast('Saved on this device. Sign in to keep the original photos in Drive.');
+      } else keepExistingPhotos();
+    } else {
+      let primaryIdx = 0;
+      if (editing) {
+        const editKey = sellerNameKey(n || editing.name);
+        const found = groups.findIndex(g => g.key === editKey);
+        if (found >= 0) primaryIdx = found;
+      }
+      const claimed = new Set();
+      groups.forEach(g => {
+        g.photos = [];
+        (g.photoIndexes || []).forEach(i => {
+          if (claimed.has(i) || !pending[i]) return;
+          g.photos.push(pending[i]);
+          claimed.add(i);
+        });
+      });
+      pending.forEach((ph, i) => {
+        if (claimed.has(i)) return;
+        const g = groups.find(x => x.key === sellerNameKey(ph.ocrSeller));
+        if (g) { g.photos.push(ph); claimed.add(i); }
+      });
+      pending.forEach((ph, i) => {
+        if (claimed.has(i)) return;
+        const target = groups[primaryIdx] || groups[0];
+        if (target) { target.photos.push(ph); claimed.add(i); }
+      });
+      const primary = groups[primaryIdx];
+      const others = groups.filter((_, i) => i !== primaryIdx);
+      const priceOverride = groups.length === 1 && pr !== '' ? +pr : undefined;
+      obj = sellerRecordFromGroup(primary, Object.assign({}, shared, {priceOverride}));
+      if (pending.length) {
+        if (primary.photos && primary.photos.length) await attachSellerPhotos(obj, primary.photos);
+        else keepExistingPhotos();
+        if (!settings.driveToken) toast('Saved on this device. Sign in to keep the original photos in Drive.');
+      } else keepExistingPhotos();
+      for (const g of others) {
+        const extra = sellerRecordFromGroup(g, shared);
+        if (pending.length && g.photos && g.photos.length) await attachSellerPhotos(extra, g.photos);
+        else { extra.photos = []; extra.photoLinks = []; }
+        extraSellers.push(extra);
+      }
+      if (others.length) {
+        sellerBatchNote = editing
+          ? ('Updated this seller and added ' + others.length + ' more.')
+          : ('Saved ' + groups.length + ' sellers.');
+      }
     }
   } else if (k === 'purchases') {
     const form = readPurchaseForm();
@@ -865,9 +959,15 @@ async function saveModal() {
   obj.updatedAt = new Date().toISOString();
   if (editing) Object.assign(editing, obj);
   else { obj.id = uid(); state[k].push(obj); }
+  extraSellers.forEach(extra => {
+    extra.id = uid();
+    extra.updatedAt = obj.updatedAt;
+    state.sellers.push(extra);
+  });
   await persist(k);
   closeModal();
   render();
+  if (sellerBatchNote) toast(sellerBatchNote);
   if (settings.driveToken) scheduleCsvSync();
   } catch (e) {
     console.error(e);

@@ -1,8 +1,8 @@
-import {settings, state} from './store.js?v=20260818t';
-import {$, esc, money, toast, lineAmount, sumLines} from './util.js?v=20260818t';
-import {CUR, CATEGORIES} from './config.js?v=20260818t';
-import {hub} from './hub.js?v=20260818t';
-import {chatConfig} from './ai.js?v=20260818t';
+import {settings, state} from './store.js?v=20260818u';
+import {$, esc, money, toast, lineAmount, sumLines} from './util.js?v=20260818u';
+import {CUR, CATEGORIES} from './config.js?v=20260818u';
+import {hub} from './hub.js?v=20260818u';
+import {chatConfig} from './ai.js?v=20260818u';
 
 let history = [];
 
@@ -98,6 +98,7 @@ function buildSystemPrompt() {
   const sellers = state.sellers.map(s => {
     const parts = [s.name];
     if (s.item) parts.push(`for ${s.item}`);
+    if (s.contact) parts.push(s.contact);
     if (s.price !== '' && s.price != null) parts.push(`quoted ${CUR}${(+s.price || 0).toLocaleString()}`);
     if (s.status) parts.push(`(${s.status})`);
     return '  ' + parts.join(' — ');

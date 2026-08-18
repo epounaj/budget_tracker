@@ -344,6 +344,9 @@ a.set-btn:hover{background:var(--line);}
 .cat-pill.on{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 6px 14px rgba(14,159,110,.22);}
 .receipt-table .col-cat{width:118px;}
 .receipt-table .ln-cat{width:100%;font:inherit;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:6px 4px;background:#fff;}
+.receipt-table.with-seller{table-layout:auto;min-width:720px;}
+.receipt-table .col-seller{width:118px;}
+.receipt-table .col-contact{width:118px;}
 .kanban{
   display:flex;gap:12px;align-items:stretch;
   overflow-x:auto;overflow-y:hidden;
@@ -429,6 +432,7 @@ body.overlay-open,body.lightbox-open,body.chat-open{overflow:hidden;}
   .chat-send-btn{min-height:48px;}
   .insights-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
   .receipt-table{table-layout:auto;min-width:520px;}
+  .receipt-table.with-seller{min-width:720px;}
   .receipt-table .col-cat{width:88px;}
   .icon-btn,.icon-btn.icon-only{min-width:44px;min-height:44px;width:auto;height:auto;}
   .cat-pill{min-height:40px;padding:8px 14px;}

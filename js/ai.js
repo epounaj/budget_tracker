@@ -1,7 +1,7 @@
-import {OCR_PROMPT, PROVIDER_DEFAULTS} from './config.js?v=20260818t';
-import {settings, saveSettings} from './store.js?v=20260818t';
-import {$, esc} from './util.js?v=20260818t';
-import {saveProfileToDrive} from './drive.js?v=20260818t';
+import {OCR_PROMPT, PROVIDER_DEFAULTS} from './config.js?v=20260818u';
+import {settings, saveSettings} from './store.js?v=20260818u';
+import {$, esc} from './util.js?v=20260818u';
+import {saveProfileToDrive} from './drive.js?v=20260818u';
 
 const modelsCache = {};
 
@@ -127,12 +127,13 @@ function parseVisionJson(text) {
   }
 }
 
-export async function callVisionOCR(dataUrl) {
+export async function callVisionOCR(dataUrl, extraPrompt) {
   const cfg = providerConfig();
+  const prompt = extraPrompt ? (OCR_PROMPT + ' ' + extraPrompt) : OCR_PROMPT;
   const body = {
     model: cfg.model,
     messages: [{role: 'user', content: [
-      {type: 'text', text: OCR_PROMPT},
+      {type: 'text', text: prompt},
       {type: 'image_url', image_url: {url: dataUrl, detail: 'high'}}
     ]}],
     max_tokens: 2800,
