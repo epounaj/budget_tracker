@@ -1,4 +1,5 @@
 /** App constants. Change categories, OAuth client, and file names here. */
+export const APP_VERSION = 'v1.0.6';  // bump this after each push
 export const CUR = 'Rs ';
 export const GOOGLE_CLIENT_ID = '379149446558-pk7favl7g2hj1dugkhqog4kbb56aut0r.apps.googleusercontent.com';
 export const PROFILE_FILE = 'site-ledger-settings.json';

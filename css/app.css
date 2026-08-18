@@ -19,6 +19,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .logo{width:30px;height:30px;border-radius:8px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .logo svg{width:17px;height:17px;stroke:#fff;fill:none;stroke-width:1.8;}
 h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
+.build-tag{font-size:10px;font-weight:500;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;letter-spacing:.02em;align-self:flex-end;margin-bottom:2px;white-space:nowrap;}
 .header-actions{display:flex;align-items:center;gap:8px;}
 .user-chip{display:none;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:4px 10px 4px 4px;max-width:170px;}
 .user-chip.show{display:flex;}
