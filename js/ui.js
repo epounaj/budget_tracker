@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818c';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818c';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818c';
-import {hub} from './hub.js?v=20260818c';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818c';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818c';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818c';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818c';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818c';
+import {TITLES, CHIP} from './config.js?v=20260818d';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818d';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818d';
+import {hub} from './hub.js?v=20260818d';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818d';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818d';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818d';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818d';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818d';
 
 function parsePurchaseLines(p) {
   if (!p) return [{item: '', qty: '', rate: '', amount: ''}];
@@ -23,8 +23,12 @@ function parsePurchaseLines(p) {
 
 function loanReceived() { return state.funds.filter(f => f.type === 'loan').reduce((s, f) => s + (+f.amount || 0), 0); }
 function ownCash() { return state.funds.filter(f => f.type === 'cash').reduce((s, f) => s + (+f.amount || 0), 0); }
-function totalSpent() { return state.purchases.reduce((s, p) => s + (+p.price || 0), 0); }
-function spentForCat(c) { return state.purchases.filter(p => (p.category || '').toLowerCase() === String(c || '').toLowerCase()).reduce((s, p) => s + (+p.price || 0), 0); }
+function purchaseTotal(p) {
+  const ls = Array.isArray(p.lines) && p.lines.length ? p.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0) : 0;
+  return ls || +p.price || 0;
+}
+function totalSpent() { return state.purchases.reduce((s, p) => s + purchaseTotal(p), 0); }
+function spentForCat(c) { return state.purchases.filter(p => (p.category || '').toLowerCase() === String(c || '').toLowerCase()).reduce((s, p) => s + purchaseTotal(p), 0); }
 
 function computeSummary() {
   const loan = loanReceived(), cash = ownCash(), spent = totalSpent(), avail = loan + cash - spent;
@@ -223,12 +227,15 @@ function renderPurchases() {
 
   let rows = '';
   filtered.forEach(p => {
+    const lineSum = Array.isArray(p.lines) && p.lines.length
+      ? p.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0) : 0;
+    const displayPrice = lineSum || +p.price || 0;
     rows += '<tr class="clickable" data-row-id="' + p.id + '">' +
       '<td>' + esc(p.date || '') + '</td>' +
       '<td>' + (p.thumb ? '<img src="' + p.thumb + '" class="thumb-sm" data-lightbox="' + p.id + '" alt="">' : '') + esc(p.item || '') + '</td>' +
       '<td>' + esc(p.seller || '') + '</td>' +
       '<td>' + esc(p.category || '') + '</td>' +
-      '<td style="font-family:ui-monospace,\'SF Mono\',Menlo,monospace;font-weight:600">' + money(p.price) + '</td>' +
+      '<td style="font-family:ui-monospace,\'SF Mono\',Menlo,monospace;font-weight:600">' + money(displayPrice) + '</td>' +
       '<td>' + esc(p.receipt || '') + '</td>' +
       '<td><div class="row-actions">' +
       '<button class="icon-btn" data-edit="purchases" data-id="' + p.id + '">Edit</button>' +
@@ -258,13 +265,17 @@ function renderPurchaseDetail(p) {
   html += '<dt>Category</dt><dd>' + esc(p.category || '—') + '</dd>';
   if (p.receipt) html += '<dt>Receipt #</dt><dd>' + esc(p.receipt) + '</dd>';
   if (p.driveLink) html += '<dt>Drive</dt><dd><a href="' + esc(p.driveLink) + '" target="_blank" rel="noopener">' + esc(p.driveFolder || 'Open in Drive') + '</a></dd>';
-  html += '<dt>Total</dt><dd style="font-weight:600">' + money(p.price) + '</dd>';
+  const lineSum = Array.isArray(p.lines) && p.lines.length
+    ? p.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0) : 0;
+  const displayTotal = lineSum || +p.price || 0;
+  html += '<dt>Total</dt><dd style="font-weight:600">' + money(displayTotal) + '</dd>';
   html += '</dl>';
   if (Array.isArray(p.lines) && p.lines.length) {
     html += '<table class="detail-lines"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>';
     p.lines.forEach(l => {
       html += '<tr><td>' + esc(l.item || '') + '</td><td>' + esc(l.qty || '') + '</td><td>' + esc(l.rate || '') + '</td><td>' + money(l.amount) + '</td></tr>';
     });
+    html += '<tr style="font-weight:600;border-top:2px solid var(--line)"><td colspan="3" style="text-align:right;padding:8px 6px;color:var(--ink-2)">Total</td><td style="padding:8px 6px">' + money(displayTotal) + '</td></tr>';
     html += '</tbody></table>';
   }
   return html;

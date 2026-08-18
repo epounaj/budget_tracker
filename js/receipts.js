@@ -1,6 +1,6 @@
-import {settings, session} from './store.js?v=20260818c';
-import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc} from './util.js?v=20260818c';
-import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818c';
+import {settings, session} from './store.js?v=20260818d';
+import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc} from './util.js?v=20260818d';
+import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818d';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -294,8 +294,10 @@ export function readPurchaseForm() {
   const date = ($('m-date') && $('m-date').value) || '';
   const receipt = ($('m-receipt') && $('m-receipt').value.trim()) || '';
   const category = normalizeCategory(($('m-category') && $('m-category').value.trim()) || '');
-  let price = parseMoney($('m-price') && $('m-price').value);
-  if (price === '') price = sumLines(lines);
+  // Always prefer the sum of line amounts as the authoritative total.
+  // Fall back to the manual total field only if there are no lines.
+  const lineSum = sumLines(lines);
+  let price = lineSum || parseMoney($('m-price') && $('m-price').value);
   const item = (($('m-item') && $('m-item').value.trim()) || lines.map(l => l.item).filter(Boolean).join(', ')).trim();
   return {lines, seller, date, receipt, category, price, item};
 }
