@@ -1,8 +1,8 @@
-import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818m';
-import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, clearSavedToken} from './store.js?v=20260818m';
-import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage} from './util.js?v=20260818m';
-import {toCSV, fromCSV} from './csv.js?v=20260818m';
-import {hub} from './hub.js?v=20260818m';
+import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818n';
+import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, clearSavedToken} from './store.js?v=20260818n';
+import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage} from './util.js?v=20260818n';
+import {toCSV, fromCSV} from './csv.js?v=20260818n';
+import {hub} from './hub.js?v=20260818n';
 
 export function appClientId() {
   const inp = $('login-client-id');

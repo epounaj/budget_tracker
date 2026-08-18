@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818m';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818m';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818m';
-import {hub} from './hub.js?v=20260818m';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818m';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818m';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818m';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818m';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818m';
+import {TITLES, CHIP} from './config.js?v=20260818n';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818n';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818n';
+import {hub} from './hub.js?v=20260818n';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818n';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818n';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818n';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818n';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818n';
 
 let sellerPendingPhotos = [];
 let sellerPendingLines = [];
@@ -742,7 +742,7 @@ function bindModal() {
     e.preventDefault();
     for (const f of files) await handlePhoto(f, true);
     await maybeScanAfterPhoto();
-  });
+  };
   const sellerIn = $('m-seller-photo');
   if (sellerIn) sellerIn.addEventListener('change', async e => {
     const fs = [...(e.target.files || [])];

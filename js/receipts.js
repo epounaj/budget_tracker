@@ -1,6 +1,6 @@
-import {settings, session} from './store.js?v=20260818m';
-import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc} from './util.js?v=20260818m';
-import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818m';
+import {settings, session} from './store.js?v=20260818n';
+import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc} from './util.js?v=20260818n';
+import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818n';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
