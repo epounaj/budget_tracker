@@ -1,8 +1,8 @@
-import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818e';
-import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, clearSavedToken} from './store.js?v=20260818e';
-import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage} from './util.js?v=20260818e';
-import {toCSV, fromCSV} from './csv.js?v=20260818e';
-import {hub} from './hub.js?v=20260818e';
+import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818f';
+import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, clearSavedToken} from './store.js?v=20260818f';
+import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage} from './util.js?v=20260818f';
+import {toCSV, fromCSV} from './csv.js?v=20260818f';
+import {hub} from './hub.js?v=20260818f';
 
 export function appClientId() {
   const inp = $('login-client-id');
@@ -17,9 +17,15 @@ export function driveApiEnableUrl() {
 export async function driveFetch(url, opts) {
   opts = opts || {};
   opts.headers = Object.assign({'Authorization': 'Bearer ' + settings.driveToken}, opts.headers || {});
-  const r = await fetch(url, opts);
-  if (r.status === 401) { clearSavedToken(); throw new Error('Drive session expired — sign in again'); }
-  if (!r.ok) {
+  for (let i = 0; i < 3; i++) {
+    const r = await fetch(url, opts);
+    if (r.status === 401) { clearSavedToken(); throw new Error('Drive session expired — sign in again'); }
+    if (r.ok) return r;
+    const transient = r.status === 429 || r.status === 408 || r.status >= 500;
+    if (transient && i < 2) {
+      await new Promise(res => setTimeout(res, 350 * (i + 1)));
+      continue;
+    }
     let msg = 'Google Drive error ' + r.status, reason = '';
     try {
       const j = await r.json();
@@ -30,7 +36,7 @@ export async function driveFetch(url, opts) {
       msg = 'Enable the Google Drive API (click Enable Drive API in Settings), wait a minute, then tap Create Drive folder.';
     throw new Error(msg);
   }
-  return r;
+  throw new Error('Drive request failed');
 }
 
 export async function ensureDriveFolder() {
@@ -240,23 +246,38 @@ export async function uploadOriginalToDrive(fileOrBlob, info) {
 }
 
 let csvSyncT;
+let syncInFlight = null;
+let syncRequested = false;
 export function scheduleCsvSync() {
   clearTimeout(csvSyncT);
   csvSyncT = setTimeout(() => { syncCsvToDrive().catch(() => {}); }, 1500);
 }
 export async function syncCsvToDrive() {
   if (!settings.driveToken) return;
+  if (syncInFlight) {
+    syncRequested = true;
+    return syncInFlight;
+  }
   session.syncStatus = 'syncing';
   hub.updateSyncPill();
-  try {
-    await pushCsvToDrive(false);
-    session.syncStatus = 'idle';
-    hub.updateSyncPill();
-  } catch (e) {
-    session.syncStatus = 'error';
-    hub.updateSyncPill();
-    toast(e.message || 'Drive sync failed');
-  }
+  syncInFlight = (async () => {
+    try {
+      await pushCsvToDrive(false);
+      session.syncStatus = 'idle';
+      hub.updateSyncPill();
+    } catch (e) {
+      session.syncStatus = 'error';
+      hub.updateSyncPill();
+      toast(e.message || 'Drive sync failed');
+    } finally {
+      syncInFlight = null;
+      if (syncRequested) {
+        syncRequested = false;
+        if (settings.csvDirty) scheduleCsvSync();
+      }
+    }
+  })();
+  return syncInFlight;
 }
 
 export function updateSyncPill() {

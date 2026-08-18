@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818e';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818e';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818e';
-import {hub} from './hub.js?v=20260818e';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818e';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818e';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818e';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818e';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818e';
+import {TITLES, CHIP} from './config.js?v=20260818f';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818f';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818f';
+import {hub} from './hub.js?v=20260818f';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818f';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818f';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818f';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818f';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818f';
 
 function parsePurchaseLines(p) {
   if (!p) return [{item: '', qty: '', rate: '', amount: ''}];
@@ -77,7 +77,7 @@ function renderDashboard() {
   const recentSpend = state.purchases.filter(p => {
     const d = p.date ? new Date(p.date).getTime() : 0;
     return d >= thirtyDaysAgo && d <= now;
-  }).reduce((s, p) => s + (+p.price || 0), 0);
+  }).reduce((s, p) => s + purchaseTotal(p), 0);
   const days30 = Math.min(30, state.purchases.length ? 30 : 0);
   const avgDaily = days30 > 0 ? recentSpend / 30 : 0;
   if (avgDaily > 0) {
@@ -111,7 +111,7 @@ function renderDashboard() {
   const sellerTotals = {};
   state.purchases.forEach(p => {
     const s = (p.seller || '').trim();
-    if (s) sellerTotals[s] = (sellerTotals[s] || 0) + (+p.price || 0);
+    if (s) sellerTotals[s] = (sellerTotals[s] || 0) + purchaseTotal(p);
   });
   const topSellers = Object.entries(sellerTotals).sort((a, b) => b[1] - a[1]).slice(0, 5);
   if (topSellers.length) {
@@ -126,7 +126,7 @@ function renderDashboard() {
   const catTotals = {};
   state.purchases.forEach(p => {
     const c = (p.category || 'Uncategorized').trim();
-    catTotals[c] = (catTotals[c] || 0) + (+p.price || 0);
+    catTotals[c] = (catTotals[c] || 0) + purchaseTotal(p);
   });
   const catList = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
   if (catList.length) {
@@ -493,7 +493,9 @@ function showErr(msg) {
 
 async function saveModal() {
   const k = session.editKind, val = id => { const el = $(id); return el ? el.value : ''; };
+  if (!k || !state[k]) return showErr('Could not save: invalid form state. Close and open again.');
   let obj;
+  try {
   if (k === 'funds') {
     const a = val('m-amount');
     if (!finiteNum(a) || +a < 0) return showErr('Enter a valid amount.');
@@ -578,6 +580,10 @@ async function saveModal() {
   closeModal();
   render();
   if (settings.driveToken) scheduleCsvSync();
+  } catch (e) {
+    console.error(e);
+    showErr(e && e.message ? e.message : 'Could not save. Please try again.');
+  }
 }
 
 export function renderSettings() {

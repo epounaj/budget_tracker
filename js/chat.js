@@ -1,22 +1,82 @@
-import {settings, state} from './store.js?v=20260818e';
-import {$, esc, money, toast} from './util.js?v=20260818e';
-import {CUR, CATEGORIES} from './config.js?v=20260818e';
-import {hub} from './hub.js?v=20260818e';
-import {chatConfig} from './ai.js?v=20260818e';
+import {settings, state} from './store.js?v=20260818f';
+import {$, esc, money, toast} from './util.js?v=20260818f';
+import {CUR, CATEGORIES} from './config.js?v=20260818f';
+import {hub} from './hub.js?v=20260818f';
+import {chatConfig} from './ai.js?v=20260818f';
 
 let history = [];
+
+function purchaseTotal(p) {
+  const ls = Array.isArray(p.lines) && p.lines.length ? p.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0) : 0;
+  return ls || +p.price || 0;
+}
+
+function buildItemPriceSnapshot(limit) {
+  const out = [];
+  state.purchases.forEach(p => {
+    const seller = p.seller || '';
+    const date = p.date || '';
+    if (Array.isArray(p.lines) && p.lines.length) {
+      p.lines.forEach(l => {
+        const item = String((l && l.item) || '').trim();
+        if (!item) return;
+        const amount = Number(l.amount) || 0;
+        const rate = Number(l.rate) || 0;
+        const qty = Number(l.qty) || 0;
+        out.push({item, amount, rate, qty, seller, date, receipt: p.receipt || '', category: p.category || ''});
+      });
+    } else if (p.item) {
+      out.push({
+        item: String(p.item).trim(),
+        amount: Number(p.price) || 0,
+        rate: 0,
+        qty: 0,
+        seller,
+        date,
+        receipt: p.receipt || '',
+        category: p.category || ''
+      });
+    }
+  });
+  out.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  return out.slice(0, limit || 300);
+}
+
+function localItemPriceAnswer(msg) {
+  const q = String(msg || '').toLowerCase();
+  if (!/(price|cost|rate|paid|how much|best price|cheapest)/i.test(q)) return '';
+  const rows = buildItemPriceSnapshot(1000);
+  if (!rows.length) return '';
+  const tokens = q.replace(/[^a-z0-9\s/.-]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !['price', 'cost', 'rate', 'paid', 'much', 'best', 'cheapest', 'what', 'for', 'item', 'this'].includes(w));
+  if (!tokens.length) return '';
+  const hits = rows.filter(r => {
+    const it = r.item.toLowerCase();
+    return tokens.every(t => it.includes(t));
+  });
+  if (!hits.length) return '';
+  const amounts = hits.map(h => h.amount).filter(n => Number.isFinite(n) && n > 0);
+  if (!amounts.length) return '';
+  const min = Math.min(...amounts), max = Math.max(...amounts);
+  const avg = amounts.reduce((s, n) => s + n, 0) / amounts.length;
+  const recent = hits[0];
+  const sample = hits.slice(0, 4).map(h => `- ${h.date || '?'} · ${h.seller || 'Unknown seller'} · ${h.item} · ${money(h.amount)}`).join('\n');
+  return `I found ${hits.length} matching line item${hits.length === 1 ? '' : 's'} for "${recent.item}".\n` +
+    `Price range: ${money(min)} to ${money(max)} · Average: ${money(avg)}.\n` +
+    `Most recent: ${money(recent.amount)} on ${recent.date || '?'} at ${recent.seller || 'Unknown seller'}.\n` +
+    `Recent matches:\n${sample}`;
+}
 
 function buildSystemPrompt() {
   const loan = state.funds.filter(f => f.type === 'loan').reduce((s, f) => s + (+f.amount || 0), 0);
   const cash = state.funds.filter(f => f.type === 'cash').reduce((s, f) => s + (+f.amount || 0), 0);
   const total = loan + cash;
-  const spent = state.purchases.reduce((s, p) => s + (+p.price || 0), 0);
+  const spent = state.purchases.reduce((s, p) => s + purchaseTotal(p), 0);
   const avail = total - spent;
 
   const catSpend = {};
   state.purchases.forEach(p => {
     const c = (p.category || 'Uncategorized').trim();
-    catSpend[c] = (catSpend[c] || 0) + (+p.price || 0);
+    catSpend[c] = (catSpend[c] || 0) + purchaseTotal(p);
   });
   const catBreakdown = Object.entries(catSpend).sort((a, b) => b[1] - a[1])
     .map(([c, a]) => `  ${c}: ${CUR}${a.toLocaleString()}`).join('\n');
@@ -24,12 +84,16 @@ function buildSystemPrompt() {
   const budgetStatus = state.budget.map(b => {
     const bud = +b.budgeted || 0;
     const sp = state.purchases.filter(p => (p.category || '').toLowerCase() === (b.category || '').toLowerCase())
-      .reduce((s, p) => s + (+p.price || 0), 0);
+      .reduce((s, p) => s + purchaseTotal(p), 0);
     return `  ${b.category}: budgeted ${CUR}${bud.toLocaleString()}, spent ${CUR}${sp.toLocaleString()}, remaining ${CUR}${(bud - sp).toLocaleString()}`;
   }).join('\n');
 
   const recent = [...state.purchases].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10)
-    .map(p => `  ${p.date || '?'} | ${p.seller || '?'} | ${p.item || '?'} | ${CUR}${(+p.price || 0).toLocaleString()} | ${p.category || ''}`).join('\n');
+    .map(p => `  ${p.date || '?'} | ${p.seller || '?'} | ${p.item || '?'} | ${CUR}${purchaseTotal(p).toLocaleString()} | ${p.category || ''}`).join('\n');
+
+  const lineHistory = buildItemPriceSnapshot(250)
+    .map(r => `  ${r.date || '?'} | ${r.seller || '?'} | ${r.item} | amount ${CUR}${(Number(r.amount) || 0).toLocaleString()}${r.rate ? (' | rate ' + CUR + Number(r.rate).toLocaleString()) : ''}${r.qty ? (' | qty ' + Number(r.qty).toLocaleString()) : ''}`)
+    .join('\n');
 
   const sellers = state.sellers.map(s => {
     const parts = [s.name];
@@ -64,7 +128,10 @@ SELLERS:
 ${sellers || '  (none)'}
 
 PENDING ACTIONS:
-${pendingActions || '  (none)'}`;
+${pendingActions || '  (none)'}
+
+LINE ITEM PRICE HISTORY:
+${lineHistory || '  (none)'}`;
 }
 
 function appendMsg(role, text) {
@@ -106,6 +173,14 @@ async function sendMessage() {
 
   input.value = '';
   appendMsg('user', msg);
+
+  const localPrice = localItemPriceAnswer(msg);
+  if (localPrice) {
+    appendMsg('assistant', localPrice);
+    history.push({role: 'assistant', content: localPrice});
+    if (history.length > 20) history = history.slice(history.length - 20);
+    return;
+  }
 
   history.push({role: 'user', content: msg});
   if (history.length > 20) history = history.slice(history.length - 20);
