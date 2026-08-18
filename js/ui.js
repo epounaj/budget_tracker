@@ -1,16 +1,25 @@
-import {TITLES, CHIP} from './config.js?v=20260818k';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818k';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818k';
-import {hub} from './hub.js?v=20260818k';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818k';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818k';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818k';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818k';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818k';
+import {TITLES, CHIP} from './config.js?v=20260818l';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818l';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818l';
+import {hub} from './hub.js?v=20260818l';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818l';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818l';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818l';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818l';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818l';
 
 let sellerPendingPhotos = [];
 let sellerPendingLines = [];
 let sellerItemSearch = '';
+let saveBusy = false;
+
+function setSaveBusy(on) {
+  saveBusy = !!on;
+  const btn = $('modal-save');
+  if (!btn) return;
+  btn.disabled = !!on;
+  btn.textContent = on ? 'Saving…' : (session.editing ? 'Save changes' : 'Save');
+}
 
 function sellerLinesTableHtml(lines) {
   if (!Array.isArray(lines) || !lines.length) return '<p class="field-hint">No extracted line items yet.</p>';
@@ -667,6 +676,7 @@ export function closeModal() {
   session.editing = null;
   session.editKind = null;
   session.photoCleared = false;
+  saveBusy = false;
   clearPendingPhoto();
   sellerPendingPhotos.forEach(ph => { if (ph && ph.url && ph.url.startsWith('blob:')) try { URL.revokeObjectURL(ph.url); } catch (e) {} });
   sellerPendingPhotos = [];
@@ -677,13 +687,13 @@ function bindModal() {
   $('modal-close').onclick = closeModal;
   $('modal-cancel').onclick = closeModal;
   $('modal-save').onclick = saveModal;
-  $('modal').addEventListener('keydown', e => {
+  $('modal').onkeydown = e => {
     if (e.key !== 'Enter' || !e.target || e.target.id === 'modal-save') return;
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     if (e.target.closest && e.target.closest('#inline-ai')) return;
     e.preventDefault();
     saveModal();
-  });
+  };
   const onFile = async e => {
     const fs = [...(e.target.files || [])];
     if (!fs.length) return;
@@ -697,7 +707,7 @@ function bindModal() {
   const ocr = $('m-ocr'); if (ocr) ocr.onclick = startReceiptScan;
   const imgs = $('m-photo-list');
   if (imgs) imgs.querySelectorAll('img').forEach((img, i) => { img.onclick = () => openPhotoLightbox(i); });
-  $('modal').addEventListener('paste', async e => {
+  $('modal').onpaste = async e => {
     if (session.editKind !== 'purchases') return;
     const items = [...((e.clipboardData && e.clipboardData.items) || [])];
     const files = items.filter(it => it.type && it.type.startsWith('image/')).map(it => it.getAsFile()).filter(Boolean);
@@ -749,8 +759,11 @@ function showErr(msg) {
 }
 
 async function saveModal() {
+  if (saveBusy) return;
   const k = session.editKind, val = id => { const el = $(id); return el ? el.value : ''; };
   if (!k || !state[k]) return showErr('Could not save: invalid form state. Close and open again.');
+  const editing = session.editing;
+  setSaveBusy(true);
   let obj;
   try {
   if (k === 'funds') {
@@ -852,17 +865,23 @@ async function saveModal() {
       obj.driveFiles = Array.isArray(session.editing.driveFiles) ? session.editing.driveFiles.slice() : [];
     }
   }
-  if (session.editing) Object.assign(session.editing, obj);
+  if (!obj) return;
+  if (editing) Object.assign(editing, obj);
   else { obj.id = uid(); state[k].push(obj); }
   await persist(k);
   closeModal();
   sellerPendingPhotos.forEach(ph => { if (ph && ph.url && ph.url.startsWith('blob:')) try { URL.revokeObjectURL(ph.url); } catch (e) {} });
   sellerPendingPhotos = [];
+  sellerPendingLines = [];
   render();
   if (settings.driveToken) scheduleCsvSync();
   } catch (e) {
     console.error(e);
     showErr(e && e.message ? e.message : 'Could not save. Please try again.');
+  } finally {
+    const overlay = $('overlay');
+    if (overlay && overlay.classList.contains('show')) setSaveBusy(false);
+    else saveBusy = false;
   }
 }
 

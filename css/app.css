@@ -161,6 +161,7 @@ h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
 .error-text.show{display:block;}
 .modal-actions{margin:0;display:flex;gap:9px;flex-shrink:0;padding:12px 22px calc(14px + var(--safe-bottom));background:var(--surface);border-top:1px solid var(--line);z-index:2;}
 .btn-primary{flex:1;font-family:inherit;font-weight:550;font-size:14.5px;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px;cursor:pointer;}
+.btn-primary:disabled{opacity:.55;cursor:default;}
 .btn-cancel{font-family:inherit;font-weight:500;font-size:14.5px;background:transparent;color:var(--ink-2);border:1px solid var(--line-2);border-radius:10px;padding:12px 20px;cursor:pointer;}
 .set-section{margin-bottom:22px;}
 .set-section h3{font-size:13px;font-weight:600;margin:0 0 4px;}
