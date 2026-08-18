@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818r';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818r';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile, lineAmount, sumLines, purchaseCategories, summarizePurchase} from './util.js?v=20260818r';
-import {hub} from './hub.js?v=20260818r';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818r';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr, categoryPillsHtml} from './receipts.js?v=20260818r';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818r';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818r';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818r';
+import {TITLES, CHIP} from './config.js?v=20260818s';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818s';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260818s';
+import {hub} from './hub.js?v=20260818s';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818s';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260818s';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818s';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818s';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818s';
 
 let sellerPendingPhotos = [];
 let sellerPendingLines = [];
@@ -129,7 +129,7 @@ function chip(status) {
 }
 
 function parsePurchaseLines(p) {
-  if (!p) return [{item: '', qty: '', rate: '', amount: ''}];
+  if (!p) return [{item: '', qty: '', rate: '', amount: '', category: ''}];
   let lines = [];
   if (Array.isArray(p.lines) && p.lines.length) lines = p.lines;
   else if (p.lines && typeof p.lines === 'string') {
@@ -137,12 +137,20 @@ function parsePurchaseLines(p) {
       const arr = JSON.parse(p.lines);
       if (Array.isArray(arr) && arr.length) lines = arr;
     } catch (e) {}
-  } else if (p.item || p.price) return [{item: p.item || '', qty: '', rate: '', amount: p.price || ''}];
-  if (!lines.length) return [{item: '', qty: '', rate: '', amount: ''}];
-  return lines.map(l => {
+  } else if (p.item || p.price) return [{item: p.item || '', qty: '', rate: '', amount: p.price || '', category: ''}];
+  if (!lines.length) return [{item: '', qty: '', rate: '', amount: '', category: ''}];
+  const mapped = lines.map(l => {
     const computed = lineAmount(l);
     return {item: l.item || '', qty: l.qty || '', rate: l.rate || '', amount: computed || l.amount || '', category: normalizeCategory(l.category)};
   });
+  const cats = purchaseCategories(p);
+  const siblingItems = mapped.map(l => l.item);
+  mapped.forEach(l => {
+    if (l.category) return;
+    if (cats.length === 1) l.category = cats[0];
+    else l.category = guessCategoryFromItem(l.item, {allowed: cats, siblingItems});
+  });
+  return mapped;
 }
 
 function loanReceived() { return state.funds.filter(f => f.type === 'loan').reduce((s, f) => s + (+f.amount || 0), 0); }
@@ -743,7 +751,9 @@ function formBody(kind, p) {
       '<div class="field"><label>Receipt no.</label><input id="m-receipt" value="' + esc(p.receipt) + '" placeholder="Optional"></div></div>' +
       '<div class="field wide"><label>Categories</label>' +
       categoryPillsHtml(purchaseCategories(p)) +
-      '<p class="field-hint">Tap all that apply. AI also tags each line — change a line if it guessed wrong.</p></div>' +
+      '<p class="field-hint">Tap all that apply. AI also tags each line — change a line if it guessed wrong.</p>' +
+      '<button type="button" class="ocr-btn" id="m-fill-ai" style="margin-top:8px">Fill missing with AI</button>' +
+      '<p class="field-hint" id="m-fill-status"></p></div>' +
       '<p class="field-hint receipt-table-label">Line items — AI fills this; tap a cell to correct.</p>' +
       purchaseLinesHtml(lines) +
       '<div class="receipt-total-row">' +
@@ -875,7 +885,11 @@ function bindModal() {
     const b = e.target.closest('.cat-pill');
     if (!b) return;
     b.classList.toggle('on');
+    prefillEmptyLineCategories();
   };
+  const fillBtn = $('m-fill-ai');
+  if (fillBtn) fillBtn.onclick = () => fillMissingWithAi();
+  if (session.editKind === 'purchases') prefillEmptyLineCategories();
   const sumEl = $('m-item');
   if (sumEl) sumEl.addEventListener('input', () => { sumEl.dataset.autogen = '0'; });
   bindSellerModalPhotos();

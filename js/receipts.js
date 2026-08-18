@@ -1,7 +1,7 @@
-import {settings, session} from './store.js?v=20260818r';
-import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase} from './util.js?v=20260818r';
-import {CATEGORIES} from './config.js?v=20260818r';
-import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818r';
+import {settings, session} from './store.js?v=20260818s';
+import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame} from './util.js?v=20260818s';
+import {CATEGORIES} from './config.js?v=20260818s';
+import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260818s';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -84,8 +84,12 @@ export function categoryPillsHtml(selected) {
 
 export function readSelectedCategories() {
   const fromLines = readLinesFromTable().map(l => normalizeCategory(l.category)).filter(Boolean);
-  const fromPills = [...document.querySelectorAll('#m-cat-pills .cat-pill.on')].map(b => normalizeCategory(b.dataset.cat)).filter(Boolean);
+  const fromPills = selectedPillCategories();
   return [...new Set(fromPills.concat(fromLines))];
+}
+
+export function selectedPillCategories() {
+  return [...document.querySelectorAll('#m-cat-pills .cat-pill.on')].map(b => normalizeCategory(b.dataset.cat)).filter(Boolean);
 }
 
 export function syncPillsFromLines() {
@@ -93,6 +97,44 @@ export function syncPillsFromLines() {
   document.querySelectorAll('#m-cat-pills .cat-pill').forEach(b => {
     if (cats.size) b.classList.toggle('on', cats.has(b.dataset.cat));
   });
+}
+
+function turnOnPillsFromLines() {
+  const cats = new Set(readLinesFromTable().map(l => normalizeCategory(l.category)).filter(Boolean));
+  document.querySelectorAll('#m-cat-pills .cat-pill').forEach(b => {
+    if (cats.has(b.dataset.cat)) b.classList.add('on');
+  });
+}
+
+function fillStatus(msg, err) {
+  const el = $('m-fill-status');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.classList.toggle('err', !!err);
+}
+
+/** Fill empty line-category dropdowns. One selected pill copies to all blanks; several pills use item-name heuristics. Never overwrites a set category. */
+export function prefillEmptyLineCategories() {
+  const pills = selectedPillCategories();
+  const body = $('m-lines');
+  if (!body) return 0;
+  const rows = [...body.querySelectorAll('tr')];
+  const siblingItems = rows.map(tr => (tr.querySelector('.ln-item') && tr.querySelector('.ln-item').value) || '');
+  let n = 0;
+  rows.forEach(tr => {
+    const sel = tr.querySelector('.ln-cat');
+    if (!sel || String(sel.value || '').trim()) return;
+    const item = (tr.querySelector('.ln-item') && tr.querySelector('.ln-item').value) || '';
+    let cat = '';
+    if (pills.length === 1) cat = pills[0];
+    else cat = guessCategoryFromItem(item, {allowed: pills, siblingItems});
+    if (cat) {
+      sel.value = cat;
+      n++;
+    }
+  });
+  if (n) turnOnPillsFromLines();
+  return n;
 }
 
 function normalizeLine(ln) {
@@ -133,6 +175,13 @@ export function normalizeOcr(data) {
   if (!lines.length && (data.item || data.summary || total !== '')) {
     lines = [{item: String(data.item || data.summary || '').trim(), qty: '', rate: '', amount: total, category: oneCat || ''}];
   }
+  const siblingItems = lines.map(l => l.item);
+  lines.forEach(l => {
+    if (l.category) return;
+    l.category = guessCategoryFromItem(l.item, {allowed: categories, siblingItems});
+    if (!l.category && categories.length === 1) l.category = categories[0];
+  });
+  categories = [...new Set(categories.concat(lines.map(l => l.category).filter(Boolean)))];
   const item = String(data.summary || data.item || '').trim() || summarizePurchase(seller, lines);
   return {seller, date, receipt, category: categories[0] || '', categories, total, item, lines};
 }
@@ -190,7 +239,6 @@ function fillSummaryFromLines() {
     itemEl.value = next;
     itemEl.dataset.autogen = '1';
   }
-  syncPillsFromLines();
 }
 
 export function renderLinesIntoTable(lines, overwrite) {
@@ -261,11 +309,16 @@ export function applyOcrFields(raw, overwrite) {
   if (set('m-category', data.category)) filled.push('category');
   if (set('m-receipt', data.receipt)) filled.push('receipt no.');
   renderLinesIntoTable(data.lines, overwrite);
-  syncPillsFromLines();
   const cats = data.categories && data.categories.length ? data.categories : (data.category ? [data.category] : []);
   if (cats.length) {
-    document.querySelectorAll('#m-cat-pills .cat-pill').forEach(b => b.classList.toggle('on', cats.includes(b.dataset.cat)));
+    document.querySelectorAll('#m-cat-pills .cat-pill').forEach(b => {
+      if (cats.includes(b.dataset.cat)) b.classList.add('on');
+    });
   }
+  prefillEmptyLineCategories();
+  const stillEmpty = readLinesFromTable().some(l => l.item && !l.category);
+  if (overwrite && !stillEmpty) syncPillsFromLines();
+  else turnOnPillsFromLines();
   const sum = sumLines(data.lines);
   const total = data.total !== '' && data.total != null ? data.total : sum;
   if (total !== '' && $('m-price') && (overwrite || !String($('m-price').value || '').trim())) {
@@ -281,6 +334,126 @@ export function applyOcrFields(raw, overwrite) {
   }
   if (data.lines.length) filled.push(data.lines.length + ' line' + (data.lines.length === 1 ? '' : 's'));
   return {data, filled};
+}
+
+function hasAiReady() {
+  if (!settings.apiKey) return false;
+  if (settings.provider === 'custom' && (!settings.apiBase || !settings.model)) return false;
+  return true;
+}
+
+function pendingPhotoUrls() {
+  const p = session.pending;
+  const photos = p && Array.isArray(p.photos) ? p.photos : [];
+  return photos.map(ph => ph && (ph.ocrDataUrl || ph.thumbDataUrl || ph.previewUrl)).filter(Boolean);
+}
+
+function missingFillPrompt(lines) {
+  const pills = selectedPillCategories();
+  const rows = (lines || []).map((l, i) =>
+    (i + 1) + '. item=' + JSON.stringify(l.item || '') +
+    ' qty=' + JSON.stringify(l.qty === '' || l.qty == null ? '' : l.qty) +
+    ' rate=' + JSON.stringify(l.rate === '' || l.rate == null ? '' : l.rate) +
+    ' amount=' + JSON.stringify(l.amount === '' || l.amount == null ? '' : l.amount) +
+    ' category=' + JSON.stringify(l.category || '')
+  ).join('\n');
+  return 'You fill missing fields on construction receipt line items. Reply ONLY with JSON: {"lines":[{"item":string,"qty":number|string,"rate":number,"amount":number,"category":string}]}. '
+    + 'category must be exactly one of: ' + CATEGORIES.join(', ') + '. '
+    + (pills.length ? ('Prefer these selected bill categories when guessing: ' + pills.join(', ') + '. ') : '')
+    + 'Never change a non-empty category. ISO-RANGE / ISORANGE / rouleau / insulation tape / cole HTA = Electrical. PVC / elbow / tuyaux / pyn / rifen / bend / cpvc = Plumbing. Glue / LA COLE near pipes = Plumbing, otherwise Electrical. '
+    + 'Return one object per current line, in the same order. Keep existing non-empty fields. '
+    + 'Current lines:\n' + (rows || '(none)');
+}
+
+function setBlankField(el, v) {
+  if (!el || v == null || v === '') return false;
+  if (String(el.value || '').trim()) return false;
+  el.value = String(v);
+  return true;
+}
+
+function applyMissingFromAiLines(aiLines) {
+  const body = $('m-lines');
+  if (!body || !Array.isArray(aiLines) || !aiLines.length) return 0;
+  const rows = [...body.querySelectorAll('tr')];
+  const used = new Set();
+  let n = 0;
+  rows.forEach((tr, i) => {
+    const itemVal = (tr.querySelector('.ln-item') && tr.querySelector('.ln-item').value.trim()) || '';
+    let idx = -1;
+    if (aiLines[i] && !used.has(i) && (!itemVal || itemsLookSame(itemVal, aiLines[i].item))) idx = i;
+    if (idx < 0 && itemVal) {
+      idx = aiLines.findIndex((l, j) => !used.has(j) && itemsLookSame(itemVal, l && l.item));
+    }
+    if (idx < 0) return;
+    used.add(idx);
+    const ai = normalizeLine(aiLines[idx]);
+    const catEl = tr.querySelector('.ln-cat');
+    if (catEl && !String(catEl.value || '').trim() && ai.category) {
+      catEl.value = ai.category;
+      n++;
+    }
+    if (setBlankField(tr.querySelector('.ln-item'), ai.item)) n++;
+    if (setBlankField(tr.querySelector('.ln-qty'), ai.qty === '' ? '' : ai.qty)) n++;
+    if (setBlankField(tr.querySelector('.ln-rate'), ai.rate === '' ? '' : ai.rate)) n++;
+    if (setBlankField(tr.querySelector('.ln-amount'), ai.amount === '' ? '' : ai.amount)) n++;
+  });
+  return n;
+}
+
+export async function fillMissingWithAi() {
+  const btn = $('m-fill-ai');
+  const lines = readLinesFromTable();
+  const needCat = lines.some(l => l.item && !l.category);
+  const needOther = lines.some(l => l.item && (l.qty === '' || l.rate === ''));
+  if (!needCat && !needOther) {
+    fillStatus('Every line already has a category.');
+    toast('Every line already has a category.');
+    return;
+  }
+  const prevLabel = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Filling…';
+  }
+  let filled = 0;
+  let used = 'local';
+  try {
+    const photos = pendingPhotoUrls();
+    if (hasAiReady()) {
+      fillStatus(photos.length
+        ? 'Asking AI to fill missing fields from the receipt photo…'
+        : 'Asking AI to fill missing categories from the line items…');
+      try {
+        const raw = await callJsonCompletion(missingFillPrompt(lines), photos);
+        const d = normalizeOcr(raw);
+        const nAi = applyMissingFromAiLines(d && d.lines);
+        filled += nAi;
+        if (nAi) used = 'ai';
+      } catch (e) {
+        used = 'local';
+        fillStatus('AI fill failed (' + (e.message || 'error') + '). Using item-name guess…', true);
+      }
+    } else {
+      fillStatus('No AI key — filling empty categories from item names…');
+    }
+    filled += prefillEmptyLineCategories();
+    if (filled) {
+      syncTotalFromLines();
+      fillSummaryFromLines();
+      turnOnPillsFromLines();
+    }
+    const msg = filled
+      ? ('Filled ' + filled + ' missing field' + (filled === 1 ? '' : 's') + (used === 'ai' ? ' with AI' : ' from item names') + '.')
+      : 'Could not guess remaining categories. Pick them in the table.';
+    fillStatus(msg, !filled);
+    toast(msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel || 'Fill missing with AI';
+    }
+  }
 }
 
 async function saveInlineAiKey() {

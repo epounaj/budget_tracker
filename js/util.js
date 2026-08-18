@@ -1,4 +1,4 @@
-import {CATEGORIES, CUR} from './config.js?v=20260818r';
+import {CATEGORIES, CUR} from './config.js?v=20260818s';
 
 export const $ = id => document.getElementById(id);
 export const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -70,6 +70,72 @@ export function normalizeCategory(raw) {
     return parts.some(p => low.includes(p) || p.includes(low));
   });
   return hit || s;
+}
+
+function itemHaystack(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function itemsLookSame(a, b) {
+  const x = itemHaystack(a), y = itemHaystack(b);
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x);
+}
+
+/** Guess Electrical vs Plumbing (etc.) from an item name. Never invent a category without a keyword hit. */
+export function guessCategoryFromItem(item, opts) {
+  const allowed = opts && Array.isArray(opts.allowed)
+    ? [...new Set(opts.allowed.map(normalizeCategory).filter(Boolean))]
+    : [];
+  const siblings = ((opts && opts.siblingItems) || []).map(itemHaystack);
+  const h = itemHaystack(item);
+  if (!h) return '';
+
+  let elec = 0, plumb = 0;
+  if (/iso\s*range|\bisorange\b|rouleau|cole\s*hta/.test(h)) elec += 3;
+  if (/(insulat|isolant|\bscotch\b|electrical|\bcable\b|\bfil\b|\bwire\b|switch|breaker|\bmcb\b|conduit|\bled\b|\blamp\b|\bbulb\b)/.test(h)) elec += 2;
+  if (/\btape\b/.test(h) && !/(thread|teflon|ptfe)/.test(h)) elec += 2;
+
+  if (/(thread\s*tape|teflon|\bptfe\b)/.test(h)) plumb += 3;
+  if (/\b(cpvc|upvc|pprc|pyn|rifen)\b/.test(h)) plumb += 3;
+  if (/\b(elbow|coude|tuyau|tuyaux|pipe|pipes|bend|coupler|valve|robinet|siphon|tee|nipple|raccord|manchon|fitting)\b/.test(h)) plumb += 2;
+  if (/\bpvc\b/.test(h) && !/(tape|insul|isol|cable|electrical)/.test(h)) plumb += 2;
+
+  if (/(la\s*cole|\bcole\b|\bcolle\b|adhesi|\bglue\b)/.test(h) && !/cole\s*hta/.test(h)) {
+    const pipesAround = siblings.some(s => /(pvc|pipe|tuyau|elbow|cpvc|pyn|rifen|bend)/.test(s));
+    if (pipesAround) plumb += 2;
+    else elec += 1;
+  }
+
+  let guess = '';
+  if (plumb > elec) guess = 'Plumbing';
+  else if (elec > plumb) guess = 'Electrical';
+  else if (elec > 0) {
+    if (allowed.includes('Plumbing') && !allowed.includes('Electrical')) guess = 'Plumbing';
+    else if (allowed.includes('Electrical') && !allowed.includes('Plumbing')) guess = 'Electrical';
+    else guess = 'Electrical';
+  }
+
+  if (!guess) {
+    const named = CATEGORIES.find(c => {
+      if (c === 'Other') return false;
+      const n = itemHaystack(c);
+      return n && (h.includes(n) || n.split(' ').every(p => p && h.includes(p)));
+    });
+    if (named) guess = named;
+  }
+
+  if (allowed.length) {
+    if (guess && allowed.includes(guess)) return guess;
+    return '';
+  }
+  return guess || '';
 }
 
 export function purchaseCategories(p) {

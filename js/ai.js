@@ -1,7 +1,7 @@
-import {OCR_PROMPT, PROVIDER_DEFAULTS} from './config.js?v=20260818r';
-import {settings, saveSettings} from './store.js?v=20260818r';
-import {$, esc} from './util.js?v=20260818r';
-import {saveProfileToDrive} from './drive.js?v=20260818r';
+import {OCR_PROMPT, PROVIDER_DEFAULTS} from './config.js?v=20260818s';
+import {settings, saveSettings} from './store.js?v=20260818s';
+import {$, esc} from './util.js?v=20260818s';
+import {saveProfileToDrive} from './drive.js?v=20260818s';
 
 const modelsCache = {};
 
@@ -136,6 +136,30 @@ export async function callVisionOCR(dataUrl) {
       {type: 'image_url', image_url: {url: dataUrl, detail: 'high'}}
     ]}],
     max_tokens: 2800,
+    temperature: 0
+  };
+  const res = await fetch(cfg.url, {method: 'POST', headers: {'Content-Type': 'application/json', Authorization: cfg.auth}, body: JSON.stringify(body)});
+  if (!res.ok) {
+    let extra = '';
+    try { const t = await res.text(); const j = JSON.parse(t); extra = (j.error && (j.error.message || j.error)) || ''; } catch (e) {}
+    throw new Error('API ' + res.status + (extra ? ': ' + String(extra).slice(0, 140) : ''));
+  }
+  const json = await res.json();
+  const txt = (json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) || '';
+  return parseVisionJson(txt);
+}
+
+/** Text or multi-image JSON completion. Used to fill missing line fields without a full re-scan. */
+export async function callJsonCompletion(prompt, imageDataUrls) {
+  const cfg = providerConfig();
+  const urls = (imageDataUrls || []).filter(Boolean);
+  const content = urls.length
+    ? [{type: 'text', text: prompt}].concat(urls.map(url => ({type: 'image_url', image_url: {url, detail: 'high'}})))
+    : prompt;
+  const body = {
+    model: cfg.model,
+    messages: [{role: 'user', content}],
+    max_tokens: urls.length ? 2800 : 2000,
     temperature: 0
   };
   const res = await fetch(cfg.url, {method: 'POST', headers: {'Content-Type': 'application/json', Authorization: cfg.auth}, body: JSON.stringify(body)});
