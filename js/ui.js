@@ -3,12 +3,23 @@ import {state, settings, session, persist, saveSettings} from './store.js';
 import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js';
 import {hub} from './hub.js';
 import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto} from './receipts.js';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js';
 import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js';
 import {downloadCSV, importCSVFile} from './csv.js';
 import {googleLogout, startGoogleLogin} from './auth.js';
 
-const chip = s => { const m = CHIP[s] || ['pending', s || '—']; return '<span class="chip ' + m[0] + '">' + m[1] + '</span>'; };
+function parsePurchaseLines(p) {
+  if (!p) return [{item: '', qty: '', rate: '', amount: ''}];
+  if (Array.isArray(p.lines) && p.lines.length) return p.lines;
+  if (p.lines && typeof p.lines === 'string') {
+    try {
+      const arr = JSON.parse(p.lines);
+      if (Array.isArray(arr) && arr.length) return arr;
+    } catch (e) {}
+  }
+  if (p.item || p.price) return [{item: p.item || '', qty: '', rate: '', amount: p.price || ''}];
+  return [{item: '', qty: '', rate: '', amount: ''}];
+}
 
 function loanReceived() { return state.funds.filter(f => f.type === 'loan').reduce((s, f) => s + (+f.amount || 0), 0); }
 function ownCash() { return state.funds.filter(f => f.type === 'cash').reduce((s, f) => s + (+f.amount || 0), 0); }
@@ -89,7 +100,8 @@ function renderPurchases() {
   const items = sorted.map(p => '<div class="entry"><div class="entry-top" style="gap:12px">' +
     (p.thumb ? '<img src="' + p.thumb + '" class="thumb" data-lightbox="' + p.id + '" alt="Receipt">' : '') +
     '<div style="flex:1"><p class="entry-name">' + esc(p.item) + '</p>' +
-    '<p class="entry-sub">' + (p.seller ? esc(p.seller) : '') + ((p.seller && p.date) ? ' · ' : '') + (p.date ? esc(p.date) : '') + '</p></div>' +
+    '<p class="entry-sub">' + (p.seller ? esc(p.seller) : '') + ((p.seller && p.date) ? ' · ' : '') + (p.date ? esc(p.date) : '') +
+    (Array.isArray(p.lines) && p.lines.length > 1 ? ' · ' + p.lines.length + ' lines' : '') + '</p></div>' +
     '<span class="entry-amount">' + money(p.price) + '</span></div>' +
     '<div class="entry-meta">' + (p.category ? '<span class="tag">' + esc(p.category) + '</span>' : '') +
     (p.receipt ? '<span class="meta-item">Receipt <strong>' + esc(p.receipt) + '</strong></span>' : '') +
@@ -97,7 +109,7 @@ function renderPurchases() {
     '<div class="entry-actions"><button class="icon-btn" data-edit="purchases" data-id="' + p.id + '">Edit</button>' +
     '<button class="icon-btn danger" data-del="purchases" data-id="' + p.id + '">Delete</button></div></div>').join('');
   return head('Purchases &amp; receipts', 'Camera or Gallery scans with AI. Correct the fields, then Save. The original photo is kept.', 'purchases') +
-    (state.purchases.length ? '<div class="entry-list">' + items + '</div>' : empty('No purchases logged yet', 'Take a photo or pick from the gallery. Save stays at the bottom.'));
+    (state.purchases.length ? '<div class="entry-list">' + items + '</div>' : empty('No purchases logged yet', 'Take a photo or pick from the gallery. AI fills the table; Save stays at the bottom.'));
 }
 
 export function render() {
@@ -177,16 +189,17 @@ function formBody(kind, p) {
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div></div>';
   }
   if (kind === 'purchases') {
-    p = p || {item: '', category: '', seller: '', price: '', date: todayStr(), receipt: '', thumb: null};
+    p = p || {item: '', category: '', seller: '', price: '', date: todayStr(), receipt: '', thumb: null, lines: []};
     const cur = (session.pending && (session.pending.previewUrl || session.pending.thumbDataUrl)) || p.thumb;
     const hasKey = !!settings.apiKey;
+    const lines = parsePurchaseLines(p);
     return '<div class="photo-field" style="margin-bottom:14px">' +
       '<div class="photo-actions">' +
       '<label class="photo-btn"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Camera' +
       '<input type="file" accept="image/*" capture="environment" id="m-photo-cam" style="display:none"></label>' +
       '<label class="photo-btn"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Gallery' +
       '<input type="file" accept="image/*" id="m-photo" style="display:none"></label></div>' +
-      '<p class="field-hint">AI reads the receipt. You can edit every field. Save stays visible at the bottom. The original photo is uploaded to Drive.</p>' +
+      '<p class="field-hint">AI reads every line on the bill into the table below. Edit anything, then Save.</p>' +
       (hasKey ? '' : '<div class="inline-ai" id="inline-ai"><p>Paste your AI key once so scan can run. It is saved to your Drive profile.</p>' +
         '<div class="form-grid">' +
         '<div class="field"><label>Provider</label><select id="m-ai-provider">' + providerOptionsHtml() + '</select></div>' +
@@ -197,15 +210,18 @@ function formBody(kind, p) {
       '<button type="button" class="ocr-btn" id="m-ocr" style="margin-top:10px"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>' + (hasKey ? 'Re-scan with AI' : 'Scan receipt') + '</button>' +
       '<div class="ocr-status" id="m-ocr-status"></div>' +
       '<div class="photo-preview ' + (cur ? 'show' : '') + '" id="m-photo-preview"><img id="m-photo-img" src="' + (cur || '') + '" alt="Receipt">' +
-      '<div class="photo-preview-meta"><p class="field-hint" id="m-photo-meta">' + (cur ? 'Photo attached. Tap it to view larger. Correct fields below, then Save.' : '') + '</p>' +
+      '<div class="photo-preview-meta"><p class="field-hint" id="m-photo-meta">' + (cur ? 'Photo attached. Tap it to view larger.' : '') + '</p>' +
       '<button type="button" class="photo-remove" id="m-photo-remove">Remove photo</button></div></div></div>' +
-      '<div class="form-grid">' +
-      '<div class="field"><label class="req">Price (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="' + esc(p.price) + '" placeholder="What you paid"></div>' +
-      '<div class="field"><label class="req">Item</label><input id="m-item" value="' + esc(p.item) + '" placeholder="e.g. 50 bags cement"></div>' +
-      '<div class="field"><label>Category</label><input list="category-options" id="m-category" value="' + esc(p.category) + '" placeholder="Foundation…"></div>' +
-      '<div class="field"><label>Seller</label><input id="m-seller" value="' + esc(p.seller) + '" placeholder="Who you bought from"></div>' +
+      '<div class="receipt-meta">' +
+      '<div class="field"><label>Seller</label><input id="m-seller" value="' + esc(p.seller) + '" placeholder="Shop / company" autocomplete="off"></div>' +
       '<div class="field"><label>Date</label><input type="date" id="m-date" value="' + esc(p.date || todayStr()) + '"></div>' +
-      '<div class="field"><label>Receipt no.</label><input id="m-receipt" value="' + esc(p.receipt) + '" placeholder="Optional"></div></div>';
+      '<div class="field"><label>Category</label><input list="category-options" id="m-category" value="' + esc(p.category) + '" placeholder="Foundation…"></div>' +
+      '<div class="field"><label>Receipt no.</label><input id="m-receipt" value="' + esc(p.receipt) + '" placeholder="Optional"></div></div>' +
+      '<p class="field-hint receipt-table-label">Line items from the bill — AI fills this table; tap a cell to correct.</p>' +
+      purchaseLinesHtml(lines) +
+      '<div class="receipt-total-row">' +
+      '<div class="field"><label class="req">Total (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="' + esc(p.price) + '" placeholder="Grand total"></div>' +
+      '<div class="field"><label class="req">Summary</label><input id="m-item" value="' + esc(p.item) + '" placeholder="Short label for the list"></div></div>';
   }
   return '';
 }
@@ -221,7 +237,7 @@ export function openModal(kind, rec) {
     budget: 'A category and the amount you planned for it.',
     actions: 'One thing still to do. Due date is optional.',
     sellers: 'A supplier and their quote, if you have it.',
-    purchases: 'Take or upload a receipt. AI fills the fields — you can correct them. Save stays at the bottom.'
+    purchases: 'Take or upload a receipt. AI fills the line-item table — you can correct it. Save stays at the bottom.'
   }[kind];
   $('modal').innerHTML =
     '<div class="modal-head"><p class="modal-title">' + title + '</p>' +
@@ -270,6 +286,7 @@ function bindModal() {
   const ocr = $('m-ocr'); if (ocr) ocr.onclick = startReceiptScan;
   const img = $('m-photo-img'); if (img) img.onclick = openPhotoLightbox;
   wireModelPicker('m-ai', 'm-ai-custom');
+  bindLineTable();
 }
 
 function showErr(msg) {
@@ -300,25 +317,27 @@ async function saveModal() {
     if (pr !== '' && (!finiteNum(pr) || +pr < 0)) return showErr('Enter a valid quoted price, or leave it blank.');
     obj = {name: n, contact: val('m-contact').trim(), item: val('m-item').trim(), price: pr === '' ? '' : +pr, status: val('m-status'), notes: val('m-notes').trim()};
   } else if (k === 'purchases') {
-    const it = val('m-item').trim(), pr = val('m-price');
-    if (!it || !finiteNum(pr) || +pr < 0) return showErr('Enter an item name and a valid price.');
-    const cat = normalizeCategory(val('m-category').trim()) || 'Uncategorized';
+    const form = readPurchaseForm();
+    if (!form.item) return showErr('Enter a summary or at least one line item.');
+    if (form.price === '' || !finiteNum(form.price) || +form.price < 0) return showErr('Enter a valid total amount.');
+    const cat = form.category || 'Uncategorized';
     const pending = session.pending;
     const thumb = session.photoCleared ? null : ((pending && pending.thumbDataUrl) || (session.editing ? session.editing.thumb : null) || null);
     obj = {
-      item: it,
-      category: cat === 'Uncategorized' && !val('m-category').trim() ? '' : cat,
-      seller: val('m-seller').trim(),
-      price: +pr,
-      date: val('m-date') || todayStr(),
-      receipt: val('m-receipt').trim(),
+      item: form.item,
+      category: cat === 'Uncategorized' && !($('m-category') && $('m-category').value.trim()) ? '' : cat,
+      seller: form.seller,
+      price: +form.price,
+      date: form.date || todayStr(),
+      receipt: form.receipt,
+      lines: form.lines,
       thumb
     };
     if (pending && pending.originalFile && settings.driveToken) {
       try {
         if (session.editing && session.editing.driveFileId) await deleteDriveFile(session.editing.driveFileId);
         const link = await uploadOriginalToDrive(pending.originalFile, {
-          item: it, category: obj.category, seller: obj.seller, date: obj.date, receipt: obj.receipt, ext: pending.ext
+          item: obj.item, category: obj.category, seller: obj.seller, date: obj.date, receipt: obj.receipt, ext: pending.ext
         });
         if (link) { obj.driveLink = link.webViewLink; obj.driveFileId = link.id; obj.driveFolder = link.folderPath || ''; }
       } catch (e) {

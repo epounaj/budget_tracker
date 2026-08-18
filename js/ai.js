@@ -75,9 +75,9 @@ export async function callVisionOCR(dataUrl) {
     model: cfg.model,
     messages: [{role: 'user', content: [
       {type: 'text', text: OCR_PROMPT},
-      {type: 'image_url', image_url: {url: dataUrl}}
+      {type: 'image_url', image_url: {url: dataUrl, detail: 'high'}}
     ]}],
-    max_tokens: 400,
+    max_tokens: 1800,
     temperature: 0
   };
   const res = await fetch(cfg.url, {method: 'POST', headers: {'Content-Type': 'application/json', Authorization: cfg.auth}, body: JSON.stringify(body)});
@@ -88,10 +88,11 @@ export async function callVisionOCR(dataUrl) {
   }
   const json = await res.json();
   let txt = (json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) || '';
-  txt = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
-  const m = txt.match(/\{[\s\S]*\}/);
+  txt = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();
+  const m = txt.match(/\{[\s\S]*\}/) || txt.match(/\[[\s\S]*\]/);
   if (m) txt = m[0];
-  return JSON.parse(txt);
+  try { return JSON.parse(txt); }
+  catch (e) { return JSON.parse(txt.replace(/,\s*([}\]])/g, '$1')); }
 }
 
 export function providerOptionsHtml() {

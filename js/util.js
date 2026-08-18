@@ -5,6 +5,31 @@ export const todayStr = () => new Date().toISOString().slice(0, 10);
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 export const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 export const money = n => CUR + Number(n || 0).toLocaleString(undefined, {maximumFractionDigits: 0});
+export function parseMoney(v) {
+  if (v == null || v === '') return '';
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  let s = String(v).trim();
+  if (!s) return '';
+  s = s.replace(/[^\d.,-]/g, '');
+  if (s.indexOf(',') >= 0 && s.indexOf('.') >= 0) s = s.replace(/,/g, '');
+  else if ((s.match(/,/g) || []).length && !s.includes('.')) s = s.replace(/,/g, '');
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : '';
+}
+
+export function parseDateISO(v) {
+  if (!v) return '';
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  let m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+  if (m) {
+    const d = m[1].padStart(2, '0'), mo = m[2].padStart(2, '0'), y = m[3];
+    if (+mo <= 12) return y + '-' + mo + '-' + d;
+  }
+  const t = Date.parse(s);
+  if (Number.isFinite(t)) return new Date(t).toISOString().slice(0, 10);
+  return '';
+}
 export const finiteNum = s => { const n = +s; return s !== '' && Number.isFinite(n); };
 export const folderSafe = s => String(s || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80);
 export const driveQueryName = name => String(name || '').replace(/'/g, "\\'");

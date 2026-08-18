@@ -39,7 +39,9 @@ export function toCSV() {
   push('budget', state.budget, ['id', 'category', 'budgeted', 'notes']);
   push('actions', state.actions, ['id', 'title', 'due', 'status', 'notes']);
   push('sellers', state.sellers, ['id', 'name', 'contact', 'item', 'price', 'status', 'notes']);
-  push('purchases', state.purchases, ['id', 'item', 'category', 'seller', 'price', 'date', 'receipt', 'notes', 'driveLink', 'driveFileId', 'driveFolder']);
+  push('purchases', state.purchases.map(p => Object.assign({}, p, {
+    lines: Array.isArray(p.lines) ? JSON.stringify(p.lines) : (p.lines || '')
+  })), ['id', 'item', 'category', 'seller', 'price', 'date', 'receipt', 'notes', 'lines', 'driveLink', 'driveFileId', 'driveFolder']);
   return lines.join('\n');
 }
 
@@ -55,6 +57,9 @@ export function fromCSV(text) {
     const vals = parseCSVLine(raw), o = {};
     cols.forEach((c, i) => o[c] = vals[i] !== undefined ? vals[i] : '');
     ['amount', 'budgeted', 'price'].forEach(n => { if (o[n] !== undefined && o[n] !== '') o[n] = +o[n]; });
+    if (o.lines && typeof o.lines === 'string' && o.lines.trim().startsWith('[')) {
+      try { o.lines = JSON.parse(o.lines); } catch (e) {}
+    }
     if (!o.id) o.id = uid();
     fresh[section].push(o);
   }
