@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818b';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818b';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818b';
-import {hub} from './hub.js?v=20260818b';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818b';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818b';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818b';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818b';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818b';
+import {TITLES, CHIP} from './config.js?v=20260818c';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818c';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818c';
+import {hub} from './hub.js?v=20260818c';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818c';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818c';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818c';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818c';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818c';
 
 function parsePurchaseLines(p) {
   if (!p) return [{item: '', qty: '', rate: '', amount: ''}];

@@ -1,6 +1,6 @@
-import {settings, session} from './store.js?v=20260818b';
-import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc} from './util.js?v=20260818b';
-import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818b';
+import {settings, session} from './store.js?v=20260818c';
+import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc} from './util.js?v=20260818c';
+import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818c';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -113,11 +113,11 @@ function sumLines(lines) {
   return lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
 }
 
-function syncTotalFromLines(force) {
+function syncTotalFromLines() {
   const totalEl = $('m-price');
   if (!totalEl) return;
   const sum = sumLines(readLinesFromTable());
-  if (force || !String(totalEl.value || '').trim()) totalEl.value = sum ? String(sum) : '';
+  if (sum) totalEl.value = String(Math.round(sum * 100) / 100);
 }
 
 function fillSummaryFromLines() {
@@ -154,7 +154,7 @@ export function bindLineTable() {
     const tr = btn.closest('tr');
     if (tr && body.querySelectorAll('tr').length > 1) tr.remove();
     else if (tr) tr.querySelectorAll('input').forEach(i => { i.value = ''; });
-    syncTotalFromLines(true);
+    syncTotalFromLines();
     fillSummaryFromLines();
   });
   body.addEventListener('input', e => {
@@ -166,7 +166,7 @@ export function bindLineTable() {
       const amt = tr.querySelector('.ln-amount');
       if (qty !== '' && rate !== '' && amt) amt.value = String(Math.round(Number(qty) * Number(rate) * 100) / 100);
     }
-    syncTotalFromLines(true);
+    syncTotalFromLines();
     fillSummaryFromLines();
   });
 }
