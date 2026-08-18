@@ -21,7 +21,7 @@ Everything is served as static files. `index.html` is the shell. Behaviour lives
 4. Settings → paste your AI API key → Save. It is written to `site-ledger-settings.json` in your Drive.
 5. Add funds, budget, sellers and purchases as usual.
 
-On another phone: sign in with the **same Google account**. Keys and CSV load from Drive.
+On another phone or PC: open the **same URL** (the GitHub Pages link, not localhost), then sign in with the **same Google account**. The ledger loads from `My Drive → Site Ledger → site-ledger.csv`. The screen layout is tighter on a phone; the numbers should match after you see “Loaded ledger from Google Drive”.
 
 ---
 
@@ -67,7 +67,9 @@ Add `https://epounaj.github.io` as an authorised origin.
 | AI API key, provider, chosen model, model list, custom API URL | Your Drive: `Site Ledger/site-ledger-settings.json` (per Google account) |
 | Ledger CSV | Your Drive: `Site Ledger/site-ledger.csv` |
 | Full receipt photos | Your Drive: `Site Ledger/Receipts/{category}/` |
-| Working copy on this phone | Browser IndexedDB for this site |
+| Working copy on this phone/PC | Browser IndexedDB for **this exact site URL** (localhost ≠ GitHub Pages) |
+
+Sign-in loads `site-ledger.csv` from Drive onto this device. Edits upload back. Phone and PC only match if both used the same Google account **and** Drive sync finished (green pill: `Drive · you@gmail.com`). Settings → **Reload from Drive** if one device looks stale.
 
 Sign out clears the key from this browser. It stays in your Drive until you sign in again.
 

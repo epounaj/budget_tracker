@@ -11,8 +11,8 @@
  */
 import {GOOGLE_CLIENT_ID} from './config.js';
 import {loadAll, settings, session} from './store.js';
-import {renderLogin, loadGis, startGoogleLogin, hideLogin, updateUserChip} from './auth.js';
-import {render, bindShell} from './ui.js';
+import {renderLogin, loadGis, startGoogleLogin} from './auth.js';
+import {bindShell} from './ui.js';
 import {appClientId} from './drive.js';
 
 bindShell();
@@ -24,9 +24,7 @@ bindShell();
     session.lastClientId = GOOGLE_CLIENT_ID || settings.driveClientId || '';
     await loadGis();
     if (settings.user && appClientId()) {
-      hideLogin();
-      updateUserChip();
-      render();
+      renderLogin({busy: true});
       startGoogleLogin(true);
       return;
     }

@@ -2,7 +2,7 @@ import {LOGIN_SCOPE, G_ICON} from './config.js';
 import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger} from './store.js';
 import {$, esc, toast} from './util.js';
 import {hub} from './hub.js';
-import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, pullCsvFromDriveIfEmpty, scheduleCsvSync} from './drive.js';
+import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, reconcileLedgerWithDrive} from './drive.js';
 
 export function secureContext() { return window.isSecureContext === true && location.protocol !== 'file:'; }
 export function loadGis() {
@@ -67,22 +67,29 @@ export function startGoogleLogin(silent) {
     client_id: cid, scope: LOGIN_SCOPE,
     callback: async resp => {
       if (!resp || !resp.access_token) {
-        if (!silent) { renderLogin(); loginErr(resp && resp.error_description || 'Sign-in cancelled.'); }
+        renderLogin();
+        if (!silent) loginErr(resp && resp.error_description || 'Sign-in cancelled.');
         return;
       }
       try { settings.driveClientId = cid; await completeLogin(resp.access_token, silent); }
       catch (e) {
-        if (!silent) { renderLogin(); loginErr(e.message || 'Sign-in failed.'); }
+        renderLogin();
+        if (!silent) loginErr(e.message || 'Sign-in failed.');
         else toast(e.message || 'Could not refresh Google session');
       }
     },
     error_callback: err => {
-      if (silent) return;
       renderLogin();
+      if (silent) return;
       loginErr((err && (err.message || err.type)) || 'Popup blocked. Allow popups for this site and try again.');
     }
   });
   gTokenClient.requestAccessToken({prompt: silent ? '' : 'select_account'});
+  if (silent) {
+    setTimeout(() => {
+      if (!session.loggedIn) renderLogin();
+    }, 4500);
+  }
 }
 async function completeLogin(token, quiet) {
   settings.driveToken = token;
@@ -92,7 +99,9 @@ async function completeLogin(token, quiet) {
   if (settings.userSub && settings.userSub !== u.sub) {
     stashAi(settings.userSub);
     emptyLedger();
-    for (const s of ['funds', 'budget', 'actions', 'sellers', 'purchases']) await persist(s);
+    settings.csvSyncedAt = '';
+    settings.csvDirty = false;
+    for (const s of ['funds', 'budget', 'actions', 'sellers', 'purchases']) await persist(s, {fromSync: true});
   }
   applyStashedAi(u.sub);
   settings.user = {email: u.email, name: u.name, picture: u.picture};
@@ -107,13 +116,12 @@ async function completeLogin(token, quiet) {
     await ensureDriveFolder();
     await loadProfileFromDrive();
     await saveProfileToDrive();
-    await pullCsvFromDriveIfEmpty();
+    await reconcileLedgerWithDrive({quiet: true});
     await saveSettings();
     hub.updateUserChip();
     hub.render();
-    scheduleCsvSync();
     if (!quiet && !existed) toast('Drive folder: My Drive → Site Ledger');
-  } catch (e) { if (!quiet) toast(e.message || 'Signed in, but Drive sync is not ready yet'); }
+  } catch (e) { toast(e.message || 'Signed in, but Drive sync is not ready yet'); }
 }
 export async function googleLogout() {
   const tok = settings.driveToken;

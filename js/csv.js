@@ -39,7 +39,7 @@ export function toCSV() {
   push('budget', state.budget, ['id', 'category', 'budgeted', 'notes']);
   push('actions', state.actions, ['id', 'title', 'due', 'status', 'notes']);
   push('sellers', state.sellers, ['id', 'name', 'contact', 'item', 'price', 'status', 'notes']);
-  push('purchases', state.purchases, ['id', 'item', 'category', 'seller', 'price', 'date', 'receipt', 'driveLink']);
+  push('purchases', state.purchases, ['id', 'item', 'category', 'seller', 'price', 'date', 'receipt', 'notes', 'driveLink', 'driveFileId', 'driveFolder']);
   return lines.join('\n');
 }
 
@@ -79,5 +79,6 @@ export async function importCSVFile(file) {
   replaceLedger(fresh);
   for (const s of ['funds', 'budget', 'actions', 'sellers', 'purchases']) await persist(s);
   hub.render();
+  if (hub.scheduleCsvSync) hub.scheduleCsvSync();
   toast('CSV imported');
 }

@@ -4,7 +4,8 @@ let db;
 export let state = {funds: [], budget: [], actions: [], sellers: [], purchases: []};
 export let settings = {
   provider: 'openai', apiKey: '', model: '', apiBase: '', models: [], profiles: {},
-  driveClientId: '', driveToken: null, driveFolderId: '', user: null, userSub: '', autoCsv: true
+  driveClientId: '', driveToken: null, driveFolderId: '', user: null, userSub: '', autoCsv: true,
+  csvSyncedAt: '', csvDirty: false
 };
 export let session = {
   activeTab: 'funds',
@@ -13,7 +14,8 @@ export let session = {
   photoCleared: false,
   pending: null,
   lastClientId: '',
-  loggedIn: false
+  loggedIn: false,
+  syncStatus: 'idle'
 };
 
 export function replaceLedger(next) {
@@ -70,7 +72,12 @@ export async function loadAll() {
   if (st) settings = Object.assign(settings, st);
 }
 
-export async function persist(store) {
+export function ledgerEmpty() {
+  return ['funds', 'budget', 'actions', 'sellers', 'purchases'].every(s => !state[s].length);
+}
+
+export async function persist(store, opts) {
+  opts = opts || {};
   await new Promise((res, rej) => {
     const t = db.transaction(store, 'readwrite');
     const os = t.objectStore(store);
@@ -79,6 +86,7 @@ export async function persist(store) {
     t.oncomplete = () => res();
     t.onerror = () => rej(t.error);
   });
+  if (!opts.fromSync) settings.csvDirty = true;
 }
 
 export function snapshotAi() {
@@ -98,7 +106,7 @@ export function applyAi(p) {
   if (p.model != null) settings.model = p.model;
   if (p.apiBase != null) settings.apiBase = p.apiBase;
   if (Array.isArray(p.models)) settings.models = p.models.slice(0, 400);
-  if (p.driveFolderId != null) settings.driveFolderId = p.driveFolderId;
+  if (p.driveFolderId) settings.driveFolderId = p.driveFolderId;
 }
 export function stashAi(sub) {
   if (!sub) return;

@@ -4,7 +4,7 @@ import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from 
 import {hub} from './hub.js';
 import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js';
 import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto} from './receipts.js';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill} from './drive.js';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js';
 import {downloadCSV, importCSVFile} from './csv.js';
 import {googleLogout} from './auth.js';
 
@@ -121,10 +121,11 @@ function attach() {
     state[k] = state[k].filter(x => x.id !== b.dataset.id);
     await persist(k);
     render();
+    if (settings.driveToken) scheduleCsvSync();
   });
   root.querySelectorAll('[data-done]').forEach(b => b.onclick = async () => {
     const it = state.actions.find(a => a.id === b.dataset.done);
-    if (it) { it.status = 'done'; await persist('actions'); render(); }
+    if (it) { it.status = 'done'; await persist('actions'); render(); if (settings.driveToken) scheduleCsvSync(); }
   });
   root.querySelectorAll('[data-lightbox]').forEach(im => im.onclick = () => {
     const r = state.purchases.find(x => x.id === im.dataset.lightbox);
@@ -348,11 +349,12 @@ export function renderSettings() {
     '<div class="modal-body">' +
     '<div class="set-section"><h3>Google account</h3><p class="hint">' + (who ? 'Signed in as <b>' + esc(who) + '</b>.' : 'Not signed in.') + '</p>' +
     '<div class="set-row"><button class="set-btn accent" id="drive-syncnow">Sync now</button>' +
+    '<button class="set-btn" id="drive-reload">Reload from Drive</button>' +
     '<button class="set-btn" id="drive-create">Create Drive folder</button>' +
     '<a class="set-btn" id="drive-enable-api" href="' + esc(driveApiEnableUrl()) + '" target="_blank" rel="noopener">Enable Drive API</a>' +
     (settings.driveFolderId ? '<a class="set-btn" id="drive-open" href="https://drive.google.com/drive/folders/' + esc(settings.driveFolderId) + '" target="_blank" rel="noopener">Open Drive folder</a>' : '') +
     '<button class="set-btn" id="google-logout">Sign out</button></div>' +
-    '<div class="set-note">Folder: <b>drive.google.com → My Drive → Site Ledger</b>. If Create Drive folder fails, tap <b>Enable Drive API</b>, click Enable, wait a minute, then tap Create Drive folder.</div></div>' +
+    '<div class="set-note">Phone and PC share <b>My Drive → Site Ledger → site-ledger.csv</b> when you sign in with the same Google account. Use the same site URL on both (<a href="https://epounaj.github.io/budget_tracker/" target="_blank" rel="noopener">GitHub Pages</a>). Layout looks different on a small screen; the numbers should match after sync.</div></div>' +
     '<div class="set-section"><h3>AI receipt scanning</h3><p class="hint">Paste your own key for OpenAI, Qwen, DeepSeek, or any OpenAI-compatible API. Saved to your Drive profile.</p>' +
     '<div class="field" style="margin-bottom:10px"><label>Provider</label><select id="set-provider">' + providerOptionsHtml() + '</select></div>' +
     '<div id="set-custom" style="display:none">' +
@@ -390,6 +392,11 @@ export function renderSettings() {
   $('csv-import').onclick = () => $('csv-file').click();
   $('csv-file').onchange = e => { const f = e.target.files && e.target.files[0]; if (f) importCSVFile(f); };
   const ds = $('drive-syncnow'); if (ds) ds.onclick = syncCsvToDrive;
+  const dr = $('drive-reload');
+  if (dr) dr.onclick = async () => {
+    try { await pullCsvFromDrive(); }
+    catch (e) { toast(e.message || 'Could not load from Drive'); }
+  };
   const mk = $('drive-create');
   if (mk) mk.onclick = async () => {
     try {
@@ -416,6 +423,9 @@ export function bindShell() {
   $('lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') $('lightbox').classList.remove('show'); });
   $('open-settings').onclick = () => { renderSettings(); $('settings-overlay').classList.add('show'); };
   $('settings-overlay').addEventListener('click', e => { if (e.target.id === 'settings-overlay') $('settings-overlay').classList.remove('show'); });
+  $('sync-pill').addEventListener('click', () => {
+    if (!settings.driveToken) hub.showLogin();
+  });
 }
 
 hub.render = render;
