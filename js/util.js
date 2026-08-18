@@ -1,4 +1,4 @@
-import {CATEGORIES, CUR} from './config.js?v=20260818v';
+import {CATEGORIES, CUR} from './config.js?v=20260818w';
 
 export const $ = id => document.getElementById(id);
 export const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -72,7 +72,7 @@ export function normalizeCategory(raw) {
   return hit || s;
 }
 
-function itemHaystack(s) {
+export function itemHaystack(s) {
   return String(s || '')
     .toLowerCase()
     .normalize('NFD')
@@ -86,6 +86,35 @@ export function itemsLookSame(a, b) {
   const x = itemHaystack(a), y = itemHaystack(b);
   if (!x || !y) return false;
   return x === y || x.includes(y) || y.includes(x);
+}
+
+/** Unit price: printed rate, else amount ÷ qty when qty > 0. */
+export function unitPrice(l) {
+  if (!l) return 0;
+  const rate = Number(parseMoney(l.rate));
+  if (Number.isFinite(rate) && rate > 0) return rate;
+  const qty = Number(parseMoney(l.qty));
+  const amt = lineAmount(l);
+  if (Number.isFinite(qty) && qty > 0 && amt > 0) return Math.round((amt / qty) * 100) / 100;
+  return 0;
+}
+
+/** 0–100. Strips punctuation so "term|" still matches Termicide. */
+export function itemMatchScore(query, item) {
+  const q = itemHaystack(query), h = itemHaystack(item);
+  if (!q || !h) return 0;
+  if (h === q) return 100;
+  if (h.includes(q)) return 90;
+  if (q.includes(h) && h.length >= 3) return 80;
+  const qt = q.split(' ').filter(t => t.length >= 2);
+  const ht = h.split(' ').filter(t => t.length >= 2);
+  if (!qt.length) return 0;
+  let hits = 0;
+  qt.forEach(t => {
+    if (ht.some(x => x === t || x.includes(t) || (t.length >= 3 && t.includes(x)))) hits++;
+  });
+  if (!hits) return 0;
+  return Math.round(30 + (hits / qt.length) * 50);
 }
 
 /** Guess Electrical vs Plumbing (etc.) from an item name. Never invent a category without a keyword hit. */

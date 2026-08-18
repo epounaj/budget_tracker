@@ -1,7 +1,7 @@
 /** Shared photo album + lightbox. Thumbs stay small; lightbox always prefers a full image. */
-import {settings, session, state} from './store.js?v=20260818v';
-import {$, esc, compressImage, extFromFile} from './util.js?v=20260818v';
-import {driveFetch} from './drive.js?v=20260818v';
+import {settings, session, state} from './store.js?v=20260818w';
+import {$, esc, compressImage, extFromFile} from './util.js?v=20260818w';
+import {driveFetch} from './drive.js?v=20260818w';
 
 export const THUMB_MAX = 720;
 export const THUMB_Q = 0.82;
@@ -166,6 +166,17 @@ function photoFromEl(im) {
       },
       cap: s.name || 'Seller photo',
       link: ph.webViewLink || ln.webViewLink || ''
+    };
+  }
+  if (kind === 'catalog') {
+    return {
+      photo: {
+        thumb: im.getAttribute('src') || '',
+        driveFileId: im.dataset.driveId || '',
+        webViewLink: im.dataset.driveLink || ''
+      },
+      cap: im.alt || 'Reference photo',
+      link: im.dataset.driveLink || ''
     };
   }
   return null;

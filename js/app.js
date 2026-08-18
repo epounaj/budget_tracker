@@ -8,14 +8,15 @@
  *   photos.js    shared album, thumbs, high-res lightbox
  *   auth.js      Google sign-in
  *   ui.js        lists, sticky Save modal, settings
+ *   catalog.js   sellers shop catalog, search, quote-from-list
  *   csv.js       export/import
  */
-import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818v';
-import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818v';
-import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818v';
-import {bindShell} from './ui.js?v=20260818v';
-import {initChat} from './chat.js?v=20260818v';
-import {appClientId} from './drive.js?v=20260818v';
+import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818w';
+import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818w';
+import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818w';
+import {bindShell} from './ui.js?v=20260818w';
+import {initChat} from './chat.js?v=20260818w';
+import {appClientId} from './drive.js?v=20260818w';
 
 try { bindShell(); } catch (e) { console.error(e); }
 try { initChat(); } catch (e) { console.error(e); }

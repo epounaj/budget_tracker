@@ -1,15 +1,20 @@
-import {TITLES, CHIP} from './config.js?v=20260818v';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818v';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260818v';
-import {hub} from './hub.js?v=20260818v';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818v';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260818v';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260818v';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818v';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818v';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818v';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260818w';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818w';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260818w';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260818w';
+import {hub} from './hub.js?v=20260818w';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818w';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260818w';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260818w';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818w';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818w';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818w';
 
 let sellerItemSearch = '';
+let sellerCatFilter = '';
+let sellerCatalogPage = 1;
+let catalogCache = [];
+let shopListDraft = '';
 let saveBusy = false;
 
 const ICO = {
@@ -288,105 +293,287 @@ function renderActions() {
     (state.actions.length ? '<div class="kanban">' + board + '</div>' : empty('No actions yet', 'Add things like "Get quote for tiles".'));
 }
 
-function sellerQuoteRows() {
-  const quoteRows = [];
-  state.sellers.forEach(s => {
-    const lines = Array.isArray(s.quoteLines) ? s.quoteLines : [];
-    lines.forEach(l => quoteRows.push({
-      sellerId: s.id,
-      seller: l.seller || s.name || '',
-      contact: l.contact || s.contact || '',
-      item: l.item || '',
-      qty: l.qty,
-      rate: Number(l.rate) || 0,
-      amount: lineAmount(l),
-      status: s.status || ''
-    }));
-  });
-  return quoteRows;
+function catalogThumbHtml(photos, item) {
+  const ph = (photos || []).find(p => p && (p.thumb || p.driveFileId));
+  if (!ph || !ph.thumb) return '';
+  let attrs = ' class="thumb-sm" data-preview="catalog" alt="' + esc(item || 'Item') + '"';
+  if (ph.driveFileId) attrs += ' data-drive-id="' + esc(ph.driveFileId) + '"';
+  if (ph.webViewLink) attrs += ' data-drive-link="' + esc(ph.webViewLink) + '"';
+  return '<img src="' + esc(ph.thumb) + '"' + attrs + '>';
 }
 
-function filterSellerQuotes(rows, query) {
-  const q = String(query || '').trim().toLowerCase();
-  if (!q) return rows;
-  return rows.filter(r =>
-    String(r.item || '').toLowerCase().includes(q) ||
-    String(r.seller || '').toLowerCase().includes(q) ||
-    String(r.contact || '').toLowerCase().includes(q) ||
-    String(r.status || '').toLowerCase().includes(q)
-  );
+function bookletHtml(photos, opts) {
+  opts = opts || {};
+  const list = (photos || []).filter(p => p && (p.thumb || p.driveFileId));
+  if (!list.length) return '';
+  const preview = opts.preview || 'catalog';
+  return '<div class="booklet">' + list.map((ph, i) => {
+    let attrs = ' data-preview="' + preview + '" data-idx="' + i + '"';
+    if (preview === 'seller' && opts.recordId) attrs += ' data-id="' + esc(opts.recordId) + '"';
+    if (ph.driveFileId) attrs += ' data-drive-id="' + esc(ph.driveFileId) + '"';
+    if (ph.webViewLink) attrs += ' data-drive-link="' + esc(ph.webViewLink) + '"';
+    const src = ph.thumb || '';
+    if (!src) return '';
+    return '<img src="' + esc(src) + '"' + attrs + ' alt="' + esc(opts.alt || 'Photo') + ' ' + (i + 1) + '">';
+  }).join('') + '</div>';
 }
 
-function sellerQuoteBodyHtml(rows) {
-  if (!rows.length) {
-    const msg = sellerItemSearch.trim()
-      ? 'No seller items match this search.'
-      : 'No extracted seller items yet. Upload seller screenshots/photos to build this table.';
-    return '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--ink-2)">' + msg + '</td></tr>';
+function pagerHtml(page, pages, total) {
+  if (pages <= 1) {
+    return total ? '<div class="pager"><span class="pager-meta">' + total + ' item' + (total === 1 ? '' : 's') + '</span></div>' : '';
   }
-  return rows.map(r => '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.seller) + '</td><td class="num">' + esc(r.qty || '') + '</td><td class="num">' + moneyDec(r.rate || 0) + '</td><td class="num">' + moneyDec(lineAmount(r)) + '</td><td>' + chip(r.status) + '</td></tr>').join('');
+  const btn = (n, label, on) => {
+    const dis = n < 1 || n > pages;
+    return '<button type="button" class="pager-btn' + (on ? ' on' : '') + '" data-page="' + n + '"' + (dis ? ' disabled' : '') + '>' + label + '</button>';
+  };
+  let nums = '';
+  let start = Math.max(1, page - 2);
+  let end = Math.min(pages, start + 4);
+  start = Math.max(1, end - 4);
+  if (start > 1) nums += btn(1, '1', page === 1);
+  if (start > 2) nums += '<span class="pager-gap">…</span>';
+  for (let i = start; i <= end; i++) nums += btn(i, String(i), i === page);
+  if (end < pages - 1) nums += '<span class="pager-gap">…</span>';
+  if (end < pages) nums += btn(pages, String(pages), page === pages);
+  return '<div class="pager">' +
+    btn(page - 1, 'Prev', false) +
+    nums +
+    btn(page + 1, 'Next', false) +
+    '<span class="pager-meta">' + total + ' item' + (total === 1 ? '' : 's') + '</span></div>';
 }
 
-function applySellerItemSearch(value) {
-  sellerItemSearch = value;
-  const tbody = $('seller-quote-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = sellerQuoteBodyHtml(filterSellerQuotes(sellerQuoteRows(), sellerItemSearch));
+function filteredCatalog() {
+  return filterCatalog(catalogCache, sellerItemSearch, sellerCatFilter);
 }
 
-function renderSellers() {
-  const fromLines = [];
-  state.purchases.forEach(p => {
-    const seller = (p.seller || '').trim();
-    const cat = (p.category || '').trim();
-    if (!Array.isArray(p.lines)) return;
-    p.lines.forEach(l => {
-      const item = String((l && l.item) || '').trim();
-      if (!item) return;
-      const amount = lineAmount(l);
-      const qty = Number(l.qty) || 0;
-      const unit = Number(l.rate) > 0 ? Number(l.rate) : (qty > 0 ? amount / qty : 0);
-      fromLines.push({item, seller, category: cat || 'Uncategorized', amount, unit, date: p.date || ''});
-    });
-  });
-  const byItem = {};
-  fromLines.forEach(r => {
-    const key = r.item.toLowerCase();
-    if (!byItem[key]) byItem[key] = {item: r.item, category: r.category, rows: []};
-    byItem[key].rows.push(r);
-  });
-  const intelligence = Object.values(byItem).map(x => {
-    const priced = x.rows.filter(r => r.unit > 0);
-    if (!priced.length) return null;
-    priced.sort((a, b) => a.unit - b.unit);
-    const best = priced[0], worst = priced[priced.length - 1];
-    const avg = priced.reduce((s, r) => s + r.unit, 0) / priced.length;
-    return {item: x.item, category: x.category, best, worst, avg, samples: priced.length};
-  }).filter(Boolean).sort((a, b) => (a.best.unit - b.best.unit)).slice(0, 80);
+function catalogBodyHtml(slice) {
+  if (!slice.length) {
+    const msg = sellerItemSearch.trim() || sellerCatFilter
+      ? 'No items match this search.'
+      : 'No prices yet. Upload quote photos or log a purchase with line items.';
+    return '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--ink-2)">' + msg + '</td></tr>';
+  }
+  return slice.map(r => '<tr class="clickable" data-catalog-id="' + esc(r.id) + '">' +
+    '<td class="item-cell">' + catalogThumbHtml(r.photos, r.item) + '<span>' + esc(r.item) + '</span></td>' +
+    '<td>' + (r.category ? '<span class="chip cat">' + esc(r.category) + '</span>' : '—') + '</td>' +
+    '<td>' + esc(r.bestSeller || '—') + '</td>' +
+    '<td class="num tight">' + (r.bestUnit ? moneyDec(r.bestUnit) : '—') + '</td>' +
+    '<td>' + esc(r.date || '—') + '</td></tr>').join('');
+}
 
-  const filteredQuotes = filterSellerQuotes(sellerQuoteRows(), sellerItemSearch);
+function sellerCatPillsHtml(rows) {
+  const present = new Set(catalogCategories(rows));
+  const extra = [...present].filter(c => !CATEGORIES.includes(c));
+  const pills = ['All'].concat(CATEGORIES).concat(extra);
+  return '<div class="cat-pills seller-cat-pills">' + pills.map(c => {
+    const val = c === 'All' ? '' : c;
+    const on = sellerCatFilter === val;
+    return '<button type="button" class="cat-pill' + (on ? ' on' : '') + '" data-cat="' + esc(val) + '">' + esc(c) + '</button>';
+  }).join('') + '</div>';
+}
 
-  const items = state.sellers.map(s => '<div class="entry"><div class="entry-top"><div><p class="entry-name">' + esc(s.name) + '</p>' +
+function refreshSellerCatalog() {
+  const filtered = filteredCatalog();
+  const slice = catalogPage(filtered, sellerCatalogPage, CATALOG_PAGE_SIZE);
+  sellerCatalogPage = slice.page;
+  const tbody = $('seller-catalog-tbody');
+  if (tbody) tbody.innerHTML = catalogBodyHtml(slice.rows);
+  const pager = $('seller-catalog-pager');
+  if (pager) pager.innerHTML = pagerHtml(slice.page, slice.pages, slice.total);
+  bindSellerCatalogClicks();
+}
+
+function focusSellerSearch() {
+  const el = document.querySelector('.seller-item-search');
+  if (!el) return;
+  const pos = el.value.length;
+  el.focus();
+  try { el.setSelectionRange(pos, pos); } catch (e) {}
+}
+
+function bindSellerCatalogClicks() {
+  const root = $('panel-root');
+  if (!root) return;
+  root.querySelectorAll('tr.clickable[data-catalog-id]').forEach(tr => {
+    tr.onclick = e => {
+      if (e.target.closest('[data-preview]')) return;
+      const row = catalogCache.find(r => r.id === tr.dataset.catalogId);
+      if (row) openCatalogItemModal(row);
+    };
+  });
+  root.querySelectorAll('#seller-catalog-pager [data-page]').forEach(b => {
+    b.onclick = () => {
+      const n = Number(b.dataset.page);
+      if (!n || b.disabled) return;
+      sellerCatalogPage = n;
+      refreshSellerCatalog();
+    };
+  });
+}
+
+function sellerCardHtml(s) {
+  const photos = sellerPhotoList(s);
+  return '<div class="entry seller-card"><div class="entry-top"><div><p class="entry-name">' + esc(s.name) + '</p>' +
     (s.contact ? '<p class="entry-sub">' + esc(s.contact) + '</p>' : '') + '</div>' + chip(s.status) + '</div>' +
-    (Array.isArray(s.photos) && s.photos.length ? ('<div class="photo-list" style="margin-top:8px">' + s.photos.slice(0, 6).map((ph, i) => '<img src="' + esc(ph.thumb || '') + '" data-preview="seller" data-id="' + s.id + '" data-idx="' + i + '" alt="Seller photo">').join('') + '</div>') : '') +
-    (Array.isArray(s.photoLinks) && s.photoLinks.length ? ('<div class="entry-meta">' + s.photoLinks.slice(0, 3).map((ln, i) => '<a href="' + esc(ln.webViewLink || ln.url || '#') + '" target="_blank" rel="noopener">Photo ' + (i + 1) + '</a>').join(' ') + '</div>') : '') +
+    bookletHtml(photos, {preview: 'seller', recordId: s.id, alt: s.name || 'Seller photo'}) +
     '<div class="entry-meta">' + (s.item ? '<span class="meta-item">' + esc(s.item) + '</span>' : '') +
     ((s.price !== '' && s.price != null) ? '<span class="meta-item">Quoted <strong>' + money(s.price) + '</strong></span>' : '') +
     (s.notes ? '<span class="meta-item">' + esc(s.notes) + '</span>' : '') + '</div>' +
-    '<div class="entry-actions">' + actBtns('sellers', s.id) + '</div></div>').join('');
-  const bestTable = intelligence.length
-    ? ('<div class="dash-section"><p class="dash-title">Best Price Intelligence (from your receipts/screenshots)</p>' +
-      '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Item</th><th>Category</th><th>Best seller</th><th>Best unit</th><th>Avg unit</th><th>Worst unit</th><th>Samples</th></tr></thead><tbody>' +
-      intelligence.map(r => '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.category) + '</td><td>' + esc(r.best.seller || 'Unknown') + '</td><td class="num">' + moneyDec(r.best.unit) + '</td><td class="num">' + moneyDec(r.avg) + '</td><td class="num">' + moneyDec(r.worst.unit) + '</td><td class="num">' + r.samples + '</td></tr>').join('') +
-      '</tbody></table></div></div>')
-    : '<div class="set-note">No comparable line-item prices yet. Add more screenshots/receipts with qty and amount to unlock best-price ranking.</div>';
-  return head('Seller shortlist', 'Compare suppliers and contractor quotes. Auto-rank best item prices from your purchase screenshots.', 'sellers') +
-    '<div class="purchase-toolbar"><input class="seller-search-field seller-item-search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Search seller items fast…" value="' + esc(sellerItemSearch) + '"></div>' +
-    '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Item</th><th>Seller</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody id="seller-quote-tbody">' +
-    sellerQuoteBodyHtml(filteredQuotes) +
-    '</tbody></table></div>' +
-    bestTable +
-    (state.sellers.length ? '<div class="entry-list">' + items + '</div>' : empty('No sellers shortlisted yet', 'Add suppliers with their quoted price and status.'));
+    '<div class="entry-actions">' + actBtns('sellers', s.id) + '</div></div>';
+}
+
+function renderSellers() {
+  catalogCache = buildCatalog();
+  const filtered = filteredCatalog();
+  const slice = catalogPage(filtered, sellerCatalogPage, CATALOG_PAGE_SIZE);
+  sellerCatalogPage = slice.page;
+  const cards = state.sellers.map(sellerCardHtml).join('');
+  return '<div class="panel-head"><div><p class="panel-title">Sellers shop</p>' +
+    '<p class="panel-desc">Search quotes and receipts together. Upload a quote photo, or paste a list to see where to buy at the best price.</p></div></div>' +
+    '<div class="shop-actions">' +
+    '<button type="button" class="shop-action" data-shop="quote"><span class="k">Upload quote photos</span><span class="s">Camera or gallery — AI reads seller, contact, and line items.</span></button>' +
+    '<button type="button" class="shop-action" data-shop="list"><span class="k">Build a shopping list</span><span class="s">Paste or upload items. We match known prices and group by seller.</span></button></div>' +
+    '<div class="purchase-toolbar"><input class="seller-search-field seller-item-search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Search item, seller, category, contact…" value="' + esc(sellerItemSearch) + '"></div>' +
+    sellerCatPillsHtml(catalogCache) +
+    '<div class="purchase-table-wrap"><table class="purchase-table shop-table"><thead><tr>' +
+    '<th>Item</th><th>Category</th><th>Best seller</th><th class="num">Best unit</th><th>Date</th></tr></thead>' +
+    '<tbody id="seller-catalog-tbody">' + catalogBodyHtml(slice.rows) + '</tbody></table></div>' +
+    '<div id="seller-catalog-pager">' + pagerHtml(slice.page, slice.pages, slice.total) + '</div>' +
+    (state.sellers.length
+      ? '<div class="dash-section seller-cards"><p class="dash-title">Your suppliers</p><div class="entry-list">' + cards + '</div></div>'
+      : empty('No suppliers saved yet', 'Upload quote photos to add a shop, or keep using purchase receipts in the catalog above.'));
+}
+
+function overlayModal(opts) {
+  session.editKind = opts.kind || null;
+  session.editing = null;
+  const modal = $('modal');
+  const overlay = $('overlay');
+  if (!modal || !overlay) return;
+  modal.innerHTML =
+    '<div class="modal-head"><p class="modal-title">' + opts.title + '</p>' +
+    '<button class="modal-close" id="modal-close" aria-label="Close">&times;</button></div>' +
+    (opts.sub ? '<p class="modal-sub">' + opts.sub + '</p>' : '') +
+    '<div class="modal-body">' + opts.body + '</div>' +
+    '<div class="modal-actions">' + (opts.actions || '<button class="btn-cancel" id="modal-cancel">Close</button>') + '</div>';
+  overlay.classList.add('show');
+  const closeBtn = $('modal-close'); if (closeBtn) closeBtn.onclick = closeModal;
+  const cancelBtn = $('modal-cancel'); if (cancelBtn) cancelBtn.onclick = closeModal;
+  if (typeof opts.bind === 'function') opts.bind();
+}
+
+function openCatalogItemModal(row) {
+  const offers = (row.offers || []);
+  const offerRows = offers.map((o, i) => '<tr' + (i === 0 ? ' class="detail-total"' : '') + '>' +
+    '<td>' + esc(o.seller || '—') + (o.contact ? '<div class="entry-sub">' + esc(o.contact) + '</div>' : '') + '</td>' +
+    '<td>' + (o.source === 'purchase' ? 'Receipt' : 'Quote') + '</td>' +
+    '<td class="num">' + esc(o.qty || '') + '</td>' +
+    '<td class="num tight">' + (o.unit ? moneyDec(o.unit) : '—') + '</td>' +
+    '<td>' + esc(o.date || '—') + '</td></tr>').join('');
+  overlayModal({
+    kind: 'catalog-item',
+    title: esc(row.item || 'Item'),
+    sub: 'Best price and every shop that quoted or sold this item.',
+    body:
+      bookletHtml(row.photos, {preview: 'catalog', alt: row.item || 'Reference photo'}) +
+      '<dl class="detail-grid">' +
+      '<dt>Best seller</dt><dd>' + esc(row.bestSeller || '—') + (row.bestContact ? '<div class="entry-sub">' + esc(row.bestContact) + '</div>' : '') + '</dd>' +
+      '<dt>Best unit</dt><dd class="tight">' + (row.bestUnit ? moneyDec(row.bestUnit) : '—') + '</dd>' +
+      '<dt>Category</dt><dd>' + (row.category ? '<span class="chip cat">' + esc(row.category) + '</span>' : '—') + '</dd>' +
+      '<dt>Date</dt><dd>' + esc(row.date || '—') + '</dd>' +
+      '<dt>Samples</dt><dd>' + (row.samples || offers.length) + '</dd></dl>' +
+      (offerRows ? '<table class="detail-lines"><thead><tr><th>Seller</th><th>Source</th><th class="num">Qty</th><th class="num">Unit</th><th>Date</th></tr></thead><tbody>' + offerRows + '</tbody></table>' : ''),
+    actions: '<button class="btn-cancel" id="modal-cancel">Close</button>'
+  });
+}
+
+function shopQuoteResultHtml(matches) {
+  const grouped = groupQuoteBySeller(matches);
+  let html = '';
+  grouped.forEach((rows, seller) => {
+    const unmatched = seller === 'Unmatched';
+    html += '<div class="quote-group' + (unmatched ? ' unmatched' : '') + '"><p class="quote-seller">' +
+      (unmatched ? 'Not found in catalog' : ('Buy at ' + esc(seller))) + '</p>';
+    rows.forEach(m => {
+      const best = m.match;
+      const alts = (m.alts || []).filter(a => a.row && best && a.row.id !== best.id).slice(0, 3);
+      html += '<div class="quote-line"><div><strong>' + esc(m.need.name) + '</strong>' +
+        (m.need.qty ? '<span class="muted"> × ' + esc(m.need.qty) + '</span>' : '') + '</div>';
+      if (best) {
+        html += '<div class="quote-price">' + (best.bestUnit ? moneyDec(best.bestUnit) : '—') + '</div>';
+        if (alts.length) {
+          html += '<p class="quote-alts">Also ' + alts.map(a => esc(a.row.bestSeller || 'other') + ' ' + (a.row.bestUnit ? moneyDec(a.row.bestUnit) : '')).join(' · ') + '</p>';
+        }
+      } else {
+        html += '<p class="quote-alts">No matching price yet. Upload a quote or receipt for this item.</p>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  return html || '<p class="field-hint">No items to match.</p>';
+}
+
+async function buildShopQuotation() {
+  const ta = $('shop-list-text');
+  shopListDraft = ta ? ta.value : shopListDraft;
+  const needs = parseShoppingList(shopListDraft);
+  const status = $('shop-list-status');
+  const out = $('shop-list-result');
+  if (!needs.length) {
+    if (status) status.textContent = 'Paste at least one item name, one per line.';
+    if (out) out.innerHTML = '';
+    return;
+  }
+  if (status) status.textContent = 'Matching ' + needs.length + ' item' + (needs.length === 1 ? '' : 's') + '…';
+  const catalog = catalogCache.length ? catalogCache : buildCatalog();
+  let matches = matchShoppingList(needs, catalog);
+  const missing = matches.filter(m => !m.match).map(m => m.need.name);
+  if (missing.length && settings.apiKey) {
+    if (status) status.textContent = 'Matching leftover names with AI…';
+    const hints = await aiAssistMatches(missing, catalog.map(r => r.item));
+    matches = applyAiMatches(matches, hints, catalog);
+  }
+  const hit = matches.filter(m => m.match).length;
+  if (status) status.textContent = 'Matched ' + hit + ' of ' + needs.length + '. Grouped by where to buy.';
+  if (out) out.innerHTML = shopQuoteResultHtml(matches);
+}
+
+function openShoppingListModal() {
+  overlayModal({
+    kind: 'shop-list',
+    title: 'Shopping list / quotation',
+    sub: 'Paste item names (one per line) or upload a .txt / .csv. We match against seller quotes and purchase receipts.',
+    body:
+      '<div class="field wide"><label>Items you need</label>' +
+      '<textarea id="shop-list-text" class="shop-list-text" rows="7" placeholder="Termicide&#10;PVC 25mm elbow&#10;electrical tape">' + esc(shopListDraft) + '</textarea></div>' +
+      '<label class="photo-btn" style="margin-top:10px">Upload .txt or .csv' +
+      '<input type="file" accept=".txt,.csv,text/plain,text/csv" id="shop-list-file" style="display:none"></label>' +
+      '<p class="field-hint" id="shop-list-status">Works without AI. If an API key is saved, leftover messy names can be matched too.</p>' +
+      '<div id="shop-list-result" class="shop-list-result"></div>',
+    actions: '<button class="btn-primary" id="shop-build">Build quotation</button><button class="btn-cancel" id="modal-cancel">Close</button>',
+    bind: () => {
+      const build = $('shop-build');
+      if (build) build.onclick = () => buildShopQuotation();
+      const file = $('shop-list-file');
+      if (file) file.onchange = e => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const ta = $('shop-list-text');
+          if (ta) ta.value = String(reader.result || '');
+          shopListDraft = ta ? ta.value : '';
+        };
+        reader.readAsText(f);
+      };
+      const ta = $('shop-list-text');
+      if (ta) {
+        ta.addEventListener('input', () => { shopListDraft = ta.value; });
+        setTimeout(() => ta.focus(), 40);
+      }
+    }
+  });
 }
 let purchaseSort = {col: 'date', asc: false};
 let purchaseSearch = '';
@@ -508,10 +695,28 @@ function attach() {
       if (settings.driveToken) scheduleCsvSync();
     }
   });
+  root.querySelectorAll('[data-shop]').forEach(b => b.onclick = () => {
+    if (b.dataset.shop === 'quote') openModal('sellers', null);
+    else if (b.dataset.shop === 'list') openShoppingListModal();
+  });
+  root.querySelectorAll('.seller-cat-pills [data-cat]').forEach(b => {
+    b.onclick = () => {
+      sellerCatFilter = b.dataset.cat || '';
+      sellerCatalogPage = 1;
+      root.querySelectorAll('.seller-cat-pills [data-cat]').forEach(x => x.classList.toggle('on', (x.dataset.cat || '') === sellerCatFilter));
+      refreshSellerCatalog();
+    };
+  });
   const sellerSearchEl = root.querySelector('.seller-item-search');
   if (sellerSearchEl) {
-    sellerSearchEl.oninput = e => applySellerItemSearch(e.target.value);
+    sellerSearchEl.oninput = e => {
+      sellerItemSearch = e.target.value;
+      sellerCatalogPage = 1;
+      refreshSellerCatalog();
+    };
+    if (sellerItemSearch) focusSellerSearch();
   }
+  bindSellerCatalogClicks();
   const searchEl = root.querySelector('.purchase-search');
   if (searchEl) {
     searchEl.oninput = e => { purchaseSearch = e.target.value; render(); };
@@ -779,7 +984,8 @@ async function attachSellerPhotos(obj, photos) {
 function sellerRecordFromGroup(g, shared) {
   const quoteLines = (g.lines || []).map(l => ({
     item: l.item, qty: l.qty, rate: l.rate, amount: l.amount,
-    seller: l.seller || g.name, contact: l.contact || g.contact
+    seller: l.seller || g.name, contact: l.contact || g.contact,
+    category: l.category || guessCategoryFromItem(l.item) || ''
   })).filter(l => l.item || l.amount !== '');
   let price = shared.priceOverride;
   if (price === undefined || price === '' || price == null) {
@@ -800,6 +1006,7 @@ function sellerRecordFromGroup(g, shared) {
 async function saveModal() {
   if (saveBusy) return;
   const k = session.editKind, val = id => { const el = $(id); return el ? el.value : ''; };
+  if (k === 'catalog-item' || k === 'shop-list') return;
   if (!k || !state[k]) return showErr('Could not save: invalid form state. Close and open again.');
   const editing = session.editing;
   setSaveBusy(true);
