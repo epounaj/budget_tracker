@@ -1,8 +1,8 @@
-import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818q';
-import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, ledgerRecordCount, snapshotLedger, mergeLedgers, LEDGER_STORES, clearSavedToken} from './store.js?v=20260818q';
-import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage, driveFolderName} from './util.js?v=20260818q';
-import {toCSV, fromCSV} from './csv.js?v=20260818q';
-import {hub} from './hub.js?v=20260818q';
+import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818r';
+import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, ledgerRecordCount, snapshotLedger, mergeLedgers, LEDGER_STORES, clearSavedToken} from './store.js?v=20260818r';
+import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage, driveFolderName} from './util.js?v=20260818r';
+import {toCSV, fromCSV} from './csv.js?v=20260818r';
+import {hub} from './hub.js?v=20260818r';
 
 export function appClientId() {
   const inp = $('login-client-id');
@@ -401,9 +401,13 @@ export async function syncCsvToDrive() {
 
 export function updateSyncPill() {
   const pill = $('sync-pill');
+  const dot = $('sync-dot');
+  const textEl = $('sync-text');
   const on = !!settings.driveToken && session.syncStatus !== 'error';
-  $('sync-dot').classList.toggle('on', on && session.syncStatus !== 'syncing');
-  $('sync-dot').classList.toggle('spin', session.syncStatus === 'syncing');
+  if (dot) {
+    dot.classList.toggle('on', on && session.syncStatus !== 'syncing');
+    dot.classList.toggle('spin', session.syncStatus === 'syncing');
+  }
   const email = settings.user && settings.user.email ? settings.user.email : '';
   let text = 'Saved to this device only — tap to continue with Google';
   if (session.syncStatus === 'syncing') text = 'Syncing with Google Drive…';
@@ -412,7 +416,7 @@ export function updateSyncPill() {
   else if (session.syncHint === 'merged') text = email ? 'Merged with Drive · ' + email : 'Merged with Drive';
   else if (session.syncHint === 'local') text = 'Saved to this device only';
   else text = email ? 'Loaded from Drive · ' + email : 'Loaded from Drive';
-  $('sync-text').textContent = text;
+  if (textEl) textEl.textContent = text;
   if (pill) {
     pill.classList.toggle('tappable', !settings.driveToken || session.syncStatus === 'error');
     pill.classList.toggle('warn', !settings.driveToken || session.syncStatus === 'error' || session.syncHint === 'local');

@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818q';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818q';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile, lineAmount, sumLines, purchaseCategories, summarizePurchase} from './util.js?v=20260818q';
-import {hub} from './hub.js?v=20260818q';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818q';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr, categoryPillsHtml} from './receipts.js?v=20260818q';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818q';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818q';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818q';
+import {TITLES, CHIP} from './config.js?v=20260818r';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818r';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile, lineAmount, sumLines, purchaseCategories, summarizePurchase} from './util.js?v=20260818r';
+import {hub} from './hub.js?v=20260818r';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818r';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr, categoryPillsHtml} from './receipts.js?v=20260818r';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818r';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818r';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818r';
 
 let sellerPendingPhotos = [];
 let sellerPendingLines = [];
@@ -549,14 +549,17 @@ function renderPurchaseDetail(p) {
 
 export function render() {
   computeSummary();
+  const root = $('panel-root');
+  if (!root) return;
   const renderer = {dashboard: renderDashboard, funds: renderFunds, budget: renderBudget, actions: renderActions, sellers: renderSellers, purchases: renderPurchases}[session.activeTab];
-  $('panel-root').innerHTML = renderer ? renderer() : renderDashboard();
+  root.innerHTML = renderer ? renderer() : renderDashboard();
   attach();
   updateSyncPill();
 }
 
 function attach() {
   const root = $('panel-root');
+  if (!root) return;
   root.querySelectorAll('[data-add]').forEach(b => b.onclick = () => openModal(b.dataset.add, null));
   root.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => {
     const k = b.dataset.edit;
@@ -765,14 +768,17 @@ export function openModal(kind, rec) {
     sellers: 'A supplier and their quote, if you have it.',
     purchases: 'Snap or pick a receipt. AI fills items, categories, and a short label. You can still correct anything.'
   }[kind];
-  $('modal').innerHTML =
+  const modal = $('modal');
+  const overlay = $('overlay');
+  if (!modal || !overlay) return;
+  modal.innerHTML =
     '<div class="modal-head"><p class="modal-title">' + title + '</p>' +
     '<button class="modal-close" id="modal-close" aria-label="Close">&times;</button></div>' +
     '<p class="modal-sub">' + sub + '</p>' +
     '<div class="modal-body">' + formBody(kind, rec) + '<p class="error-text" id="modal-error"></p></div>' +
     '<div class="modal-actions"><button class="btn-primary" id="modal-save">' + (rec ? 'Save changes' : 'Save') + '</button>' +
     '<button class="btn-cancel" id="modal-cancel">Cancel</button></div>';
-  $('overlay').classList.add('show');
+  overlay.classList.add('show');
   bindModal();
   if (kind !== 'purchases') setTimeout(() => {
     const el = $('m-amount') || $('m-title') || $('m-name');
@@ -781,7 +787,8 @@ export function openModal(kind, rec) {
 }
 
 export function closeModal() {
-  $('overlay').classList.remove('show');
+  const overlay = $('overlay');
+  if (overlay) overlay.classList.remove('show');
   session.editing = null;
   session.editKind = null;
   session.photoCleared = false;
@@ -793,10 +800,11 @@ export function closeModal() {
 }
 
 function bindModal() {
-  $('modal-close').onclick = closeModal;
-  $('modal-cancel').onclick = closeModal;
-  $('modal-save').onclick = saveModal;
-  $('modal').onkeydown = e => {
+  const closeBtn = $('modal-close'); if (closeBtn) closeBtn.onclick = closeModal;
+  const cancelBtn = $('modal-cancel'); if (cancelBtn) cancelBtn.onclick = closeModal;
+  const saveBtn = $('modal-save'); if (saveBtn) saveBtn.onclick = saveModal;
+  const modal = $('modal');
+  if (modal) modal.onkeydown = e => {
     if (e.key !== 'Enter' || !e.target || e.target.id === 'modal-save') return;
     if (e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     if (e.target.closest && e.target.closest('#inline-ai')) return;
@@ -816,7 +824,7 @@ function bindModal() {
   const ocr = $('m-ocr'); if (ocr) ocr.onclick = startReceiptScan;
   const imgs = $('m-photo-list');
   if (imgs) imgs.querySelectorAll('img').forEach((img, i) => { img.onclick = () => openPhotoLightbox(i); });
-  $('modal').onpaste = async e => {
+  if (modal) modal.onpaste = async e => {
     if (session.editKind !== 'purchases') return;
     const items = [...((e.clipboardData && e.clipboardData.items) || [])];
     const files = items.filter(it => it.type && it.type.startsWith('image/')).map(it => it.getAsFile()).filter(Boolean);
@@ -884,6 +892,7 @@ function bindSellerModalPhotos() {
 
 function showErr(msg) {
   const e = $('modal-error');
+  if (!e) { toast(msg); return; }
   e.textContent = msg;
   e.classList.add('show');
 }
@@ -1021,7 +1030,9 @@ async function saveModal() {
 
 export function renderSettings() {
   const who = settings.user ? (settings.user.name || settings.user.email) : '';
-  $('settings-modal').innerHTML =
+  const settingsModal = $('settings-modal');
+  if (!settingsModal) return;
+  settingsModal.innerHTML =
     '<div class="modal-head"><p class="modal-title">Settings</p><button class="modal-close" id="set-close">&times;</button></div>' +
     '<div class="modal-body">' +
     '<div class="set-section"><h3>Google account</h3><p class="hint">' + (who ? 'Signed in as <b>' + esc(who) + '</b>.' : 'Not signed in.') + '</p>' +
@@ -1047,7 +1058,8 @@ export function renderSettings() {
     '<button class="set-btn" id="csv-import">Import CSV</button>' +
     '<input type="file" accept=".csv,text/csv" id="csv-file" style="display:none"></div></div></div>' +
     '<div class="modal-actions"><button class="btn-primary" id="set-save">Save settings</button></div>';
-  $('set-close').onclick = () => $('settings-overlay').classList.remove('show');
+  const setClose = $('set-close');
+  if (setClose) setClose.onclick = () => { const ov = $('settings-overlay'); if (ov) ov.classList.remove('show'); };
   wireModelPicker('set', 'set-custom');
   const chatModelSel = $('set-chat-model');
   if (chatModelSel && Array.isArray(settings.models)) {
@@ -1063,9 +1075,12 @@ export function renderSettings() {
       chatModelSel.appendChild(o);
     }
   }
-  $('set-save').onclick = async () => {
-    settings.provider = $('set-provider').value;
-    settings.apiKey = $('set-key').value.trim();
+  const setSave = $('set-save');
+  if (setSave) setSave.onclick = async () => {
+    const providerEl = $('set-provider');
+    const keyEl = $('set-key');
+    if (providerEl) settings.provider = providerEl.value;
+    if (keyEl) settings.apiKey = keyEl.value.trim();
     settings.model = readModelValue('set');
     const baseEl = $('set-base'); if (baseEl) settings.apiBase = baseEl.value.trim();
     const modelSel = $('set-model');
@@ -1080,11 +1095,12 @@ export function renderSettings() {
     try { await saveProfileToDrive(); toast('Saved to your Google profile'); }
     catch (e) { toast(e.message || 'Saved on this device only'); }
     updateSyncPill();
-    $('settings-overlay').classList.remove('show');
+    const ov = $('settings-overlay'); if (ov) ov.classList.remove('show');
   };
-  $('csv-export').onclick = downloadCSV;
-  $('csv-import').onclick = () => $('csv-file').click();
-  $('csv-file').onchange = e => { const f = e.target.files && e.target.files[0]; if (f) importCSVFile(f); };
+  const csvExport = $('csv-export'); if (csvExport) csvExport.onclick = downloadCSV;
+  const csvImport = $('csv-import'); const csvFile = $('csv-file');
+  if (csvImport && csvFile) csvImport.onclick = () => csvFile.click();
+  if (csvFile) csvFile.onchange = e => { const f = e.target.files && e.target.files[0]; if (f) importCSVFile(f); };
   const ds = $('drive-syncnow'); if (ds) ds.onclick = syncCsvToDrive;
   const dr = $('drive-reload');
   if (dr) dr.onclick = async () => {
@@ -1104,8 +1120,32 @@ export function renderSettings() {
   const lo = $('google-logout'); if (lo) lo.onclick = googleLogout;
 }
 
+function syncChromeClasses() {
+  const shown = id => {
+    const el = $(id);
+    return !!(el && el.classList.contains('show'));
+  };
+  const body = document.body;
+  if (!body) return;
+  body.classList.toggle('overlay-open', shown('overlay') || shown('settings-overlay'));
+  body.classList.toggle('lightbox-open', shown('lightbox'));
+  body.classList.toggle('login-open', shown('login-screen'));
+  body.classList.toggle('chat-open', shown('chat-panel'));
+}
+
+function watchChrome() {
+  syncChromeClasses();
+  if (typeof MutationObserver === 'undefined') return;
+  const obs = new MutationObserver(syncChromeClasses);
+  ['overlay', 'settings-overlay', 'lightbox', 'login-screen', 'chat-panel'].forEach(id => {
+    const el = $(id);
+    if (el) obs.observe(el, {attributes: true, attributeFilter: ['class']});
+  });
+}
+
 export function bindShell() {
-  $('tabs').addEventListener('click', e => {
+  const tabs = $('tabs');
+  if (tabs) tabs.addEventListener('click', e => {
     const b = e.target.closest('.tab-btn');
     if (!b) return;
     session.activeTab = b.dataset.tab;
@@ -1113,12 +1153,22 @@ export function bindShell() {
     document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x.dataset.tab === session.activeTab));
     render();
   });
-  $('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeModal(); });
-  $('lightbox-close').onclick = () => $('lightbox').classList.remove('show');
-  $('lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') $('lightbox').classList.remove('show'); });
-  $('open-settings').onclick = () => { renderSettings(); $('settings-overlay').classList.add('show'); };
-  $('settings-overlay').addEventListener('click', e => { if (e.target.id === 'settings-overlay') $('settings-overlay').classList.remove('show'); });
-  $('sync-pill').addEventListener('click', async () => {
+  const overlay = $('overlay');
+  if (overlay) overlay.addEventListener('click', e => { if (e.target.id === 'overlay') closeModal(); });
+  const lbClose = $('lightbox-close');
+  const lightbox = $('lightbox');
+  if (lbClose && lightbox) lbClose.onclick = () => lightbox.classList.remove('show');
+  if (lightbox) lightbox.addEventListener('click', e => { if (e.target.id === 'lightbox') lightbox.classList.remove('show'); });
+  const openSettings = $('open-settings');
+  if (openSettings) openSettings.onclick = () => {
+    renderSettings();
+    const ov = $('settings-overlay');
+    if (ov) ov.classList.add('show');
+  };
+  const settingsOverlay = $('settings-overlay');
+  if (settingsOverlay) settingsOverlay.addEventListener('click', e => { if (e.target.id === 'settings-overlay') settingsOverlay.classList.remove('show'); });
+  const syncPill = $('sync-pill');
+  if (syncPill) syncPill.addEventListener('click', async () => {
     if (session.syncStatus === 'error' && settings.driveToken) {
       try { await hub.reconcileLedgerWithDrive(); }
       catch (e) { toast(e.message || 'Drive sync failed'); }
@@ -1131,6 +1181,7 @@ export function bindShell() {
     const k = session.activeTab === 'dashboard' ? 'purchases' : session.activeTab;
     if (TITLES[k]) openModal(k, null);
   };
+  watchChrome();
 }
 
 hub.render = render;

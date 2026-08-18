@@ -1,8 +1,8 @@
-import {settings, state} from './store.js?v=20260818q';
-import {$, esc, money, toast, lineAmount, sumLines} from './util.js?v=20260818q';
-import {CUR, CATEGORIES} from './config.js?v=20260818q';
-import {hub} from './hub.js?v=20260818q';
-import {chatConfig} from './ai.js?v=20260818q';
+import {settings, state} from './store.js?v=20260818r';
+import {$, esc, money, toast, lineAmount, sumLines} from './util.js?v=20260818r';
+import {CUR, CATEGORIES} from './config.js?v=20260818r';
+import {hub} from './hub.js?v=20260818r';
+import {chatConfig} from './ai.js?v=20260818r';
 
 let history = [];
 

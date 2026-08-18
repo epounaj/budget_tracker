@@ -9,15 +9,15 @@
  *   ui.js        lists, sticky Save modal, settings
  *   csv.js       export/import
  */
-import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818q';
-import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818q';
-import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818q';
-import {bindShell} from './ui.js?v=20260818q';
-import {initChat} from './chat.js?v=20260818q';
-import {appClientId} from './drive.js?v=20260818q';
+import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818r';
+import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818r';
+import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818r';
+import {bindShell} from './ui.js?v=20260818r';
+import {initChat} from './chat.js?v=20260818r';
+import {appClientId} from './drive.js?v=20260818r';
 
-bindShell();
-initChat();
+try { bindShell(); } catch (e) { console.error(e); }
+try { initChat(); } catch (e) { console.error(e); }
 const _bt = document.getElementById('build-tag');
 if (_bt) _bt.textContent = APP_VERSION;
 

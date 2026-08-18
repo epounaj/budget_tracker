@@ -1,8 +1,8 @@
-import {LOGIN_SCOPE, G_ICON} from './config.js?v=20260818q';
-import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger, persistOauth, clearSavedToken, tokenIsFresh} from './store.js?v=20260818q';
-import {$, esc, toast} from './util.js?v=20260818q';
-import {hub} from './hub.js?v=20260818q';
-import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, reconcileLedgerWithDrive} from './drive.js?v=20260818q';
+import {LOGIN_SCOPE, G_ICON} from './config.js?v=20260818r';
+import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger, persistOauth, clearSavedToken, tokenIsFresh} from './store.js?v=20260818r';
+import {$, esc, toast} from './util.js?v=20260818r';
+import {hub} from './hub.js?v=20260818r';
+import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, reconcileLedgerWithDrive} from './drive.js?v=20260818r';
 
 export function secureContext() { return window.isSecureContext === true && location.protocol !== 'file:'; }
 export function loadGis() {
@@ -17,14 +17,18 @@ export function loadGis() {
 }
 export function showLogin(opts) {
   opts = opts || {};
-  $('login-screen').classList.add('show');
-  $('app').hidden = true;
+  const screen = $('login-screen');
+  const app = $('app');
+  if (screen) screen.classList.add('show');
+  if (app) app.hidden = true;
   session.loggedIn = false;
   renderLogin(opts);
 }
 export function hideLogin() {
-  $('login-screen').classList.remove('show');
-  $('app').hidden = false;
+  const screen = $('login-screen');
+  const app = $('app');
+  if (screen) screen.classList.remove('show');
+  if (app) app.hidden = false;
   session.loggedIn = true;
 }
 function loginErr(msg) {
@@ -39,7 +43,9 @@ export function renderLogin(opts) {
   const origin = location.origin;
   const cid = appClientId() || session.lastClientId;
   const who = settings.user && (settings.user.name || settings.user.email);
-  $('login-card').innerHTML =
+  const card = $('login-card');
+  if (!card) return;
+  card.innerHTML =
     '<div class="login-brand"><div class="logo"><svg viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-6h6v6"/></svg></div><h1>Site Ledger</h1></div>' +
     '<h2>Sign in to continue</h2>' +
     '<p class="lead">' + (who ? 'Welcome back, ' + esc(who) + '. ' : '') + 'Sign in with Google to load the <b>same</b> ledger on phone and PC from Drive.</p>' +
@@ -175,8 +181,10 @@ export function updateUserChip() {
   const chip = $('user-chip');
   if (!chip) return;
   if (!settings.user) { chip.classList.remove('show'); return; }
-  $('user-pic').src = settings.user.picture || '';
-  $('user-name').textContent = settings.user.name || settings.user.email || 'Signed in';
+  const pic = $('user-pic');
+  const name = $('user-name');
+  if (pic) pic.src = settings.user.picture || '';
+  if (name) name.textContent = settings.user.name || settings.user.email || 'Signed in';
   chip.classList.add('show');
 }
 

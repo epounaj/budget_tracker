@@ -1,7 +1,7 @@
-import {settings, session} from './store.js?v=20260818q';
-import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase} from './util.js?v=20260818q';
-import {CATEGORIES} from './config.js?v=20260818q';
-import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818q';
+import {settings, session} from './store.js?v=20260818r';
+import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase} from './util.js?v=20260818r';
+import {CATEGORIES} from './config.js?v=20260818r';
+import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818r';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -388,8 +388,9 @@ export function openPhotoLightbox(idx) {
   const ph = (p && Array.isArray(p.photos) && p.photos[idx || 0]) || firstPendingPhoto();
   const src = (ph && (ph.previewUrl || ph.thumbDataUrl)) || '';
   if (!src) return;
-  $('lightbox-img').src = src;
-  $('lightbox').classList.add('show');
+  const img = $('lightbox-img'), box = $('lightbox');
+  if (img) img.src = src;
+  if (box) box.classList.add('show');
 }
 
 export function readPurchaseForm() {
