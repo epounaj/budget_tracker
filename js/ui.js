@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818j';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818j';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818j';
-import {hub} from './hub.js?v=20260818j';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818j';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818j';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818j';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818j';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818j';
+import {TITLES, CHIP} from './config.js?v=20260818k';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818k';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818k';
+import {hub} from './hub.js?v=20260818k';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818k';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818k';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818k';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818k';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818k';
 
 let sellerPendingPhotos = [];
 let sellerPendingLines = [];
@@ -21,9 +21,18 @@ function sellerLinesTableHtml(lines) {
 
 async function extractSellerLinesFromPending(overwrite) {
   const status = $('m-seller-ocr-status');
-  if (!sellerPendingPhotos.length || !settings.apiKey) return;
+  if (!sellerPendingPhotos.length) {
+    if (status) status.textContent = 'Add at least one seller photo first.';
+    return;
+  }
+  if (!settings.apiKey) {
+    if (status) status.textContent = 'AI key missing. Add it in Settings → AI receipt scanning.';
+    return;
+  }
   const merged = [];
   let firstSeller = '', firstCategory = '';
+  let failCount = 0;
+  let lastErr = '';
   for (let i = 0; i < sellerPendingPhotos.length; i++) {
     if (status) status.textContent = 'Reading seller image ' + (i + 1) + ' of ' + sellerPendingPhotos.length + '…';
     const ph = sellerPendingPhotos[i];
@@ -43,7 +52,10 @@ async function extractSellerLinesFromPending(overwrite) {
           amount: Number(l.amount) || 0
         });
       });
-    } catch (e) {}
+    } catch (e) {
+      failCount++;
+      lastErr = e && e.message ? e.message : 'OCR failed';
+    }
   }
   if (merged.length && (overwrite || !sellerPendingLines.length)) sellerPendingLines = merged;
   const itemEl = $('m-item');
@@ -54,7 +66,19 @@ async function extractSellerLinesFromPending(overwrite) {
   if (catEl && !catEl.value.trim() && firstCategory) catEl.value = firstCategory;
   const box = $('m-seller-lines');
   if (box) box.innerHTML = sellerLinesTableHtml(sellerPendingLines);
-  if (status) status.textContent = sellerPendingLines.length ? ('Extracted ' + sellerPendingLines.length + ' line items from seller images.') : 'Could not extract line items. You can still save manually.';
+  const quotedEl = $('m-price');
+  if (quotedEl && sellerPendingLines.length && (!String(quotedEl.value || '').trim() || overwrite)) {
+    const sum = sellerPendingLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+    if (sum > 0) quotedEl.value = String(Math.round(sum * 100) / 100);
+  }
+  if (status) {
+    if (sellerPendingLines.length) {
+      const extra = failCount ? (' (' + failCount + ' image' + (failCount === 1 ? '' : 's') + ' failed)') : '';
+      status.textContent = 'Extracted ' + sellerPendingLines.length + ' line items from seller images' + extra + '.';
+    } else {
+      status.textContent = 'Could not extract line items' + (lastErr ? (': ' + lastErr) : '') + '. You can still save manually.';
+    }
+  }
 }
 
 function chip(status) {
@@ -566,7 +590,7 @@ function formBody(kind, p) {
       '<div class="photo-actions"><label class="photo-btn">Add photos<input type="file" accept="image/*" multiple id="m-seller-photo" style="display:none"></label></div>' +
       '<div class="photo-list" id="m-seller-photo-list">' + curPhotos.map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-modal-photo="' + i + '" alt="Seller photo ' + (i + 1) + '">').join('') + '</div>' +
       '<button type="button" class="photo-remove" id="m-seller-photo-remove" style="' + (curPhotos.length ? '' : 'display:none') + '">Remove all seller photos</button></div>' +
-      '<div class="field wide"><label>Extracted line items</label><p class="field-hint" id="m-seller-ocr-status">' + (curLines.length ? ('Loaded ' + curLines.length + ' extracted lines.') : 'Add seller screenshots/photos to auto-extract items.') + '</p><div id="m-seller-lines">' + sellerLinesTableHtml(curLines) + '</div></div>' +
+      '<div class="field wide"><label>Extracted line items</label><button type="button" class="ocr-btn" id="m-seller-ocr" style="margin:4px 0 8px">Extract with AI</button><p class="field-hint" id="m-seller-ocr-status">' + (curLines.length ? ('Loaded ' + curLines.length + ' extracted lines.') : 'Add seller screenshots/photos and tap Extract with AI.') + '</p><div id="m-seller-lines">' + sellerLinesTableHtml(curLines) + '</div></div>' +
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div></div>';
   }
   if (kind === 'purchases') {
@@ -707,6 +731,12 @@ function bindModal() {
     const list = $('m-seller-photo-list');
     if (list) list.innerHTML = '';
     rmSeller.style.display = 'none';
+  };
+  const sellerOcrBtn = $('m-seller-ocr');
+  if (sellerOcrBtn) sellerOcrBtn.onclick = async () => {
+    sellerOcrBtn.disabled = true;
+    await extractSellerLinesFromPending(true);
+    sellerOcrBtn.disabled = false;
   };
   wireModelPicker('m-ai', 'm-ai-custom');
   bindLineTable();
