@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818n';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818n';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818n';
-import {hub} from './hub.js?v=20260818n';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818n';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818n';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818n';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818n';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818n';
+import {TITLES, CHIP} from './config.js?v=20260818o';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818o';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile, lineAmount, sumLines} from './util.js?v=20260818o';
+import {hub} from './hub.js?v=20260818o';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818o';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818o';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818o';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818o';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818o';
 
 let sellerPendingPhotos = [];
 let sellerPendingLines = [];
@@ -24,7 +24,7 @@ function setSaveBusy(on) {
 function sellerLinesTableHtml(lines) {
   if (!Array.isArray(lines) || !lines.length) return '<p class="field-hint">No extracted line items yet.</p>';
   return '<div class="receipt-table-wrap"><table class="receipt-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>' +
-    lines.map(l => '<tr><td>' + esc(l.item || '') + '</td><td>' + esc(l.qty || '') + '</td><td>' + money(l.rate || 0) + '</td><td>' + money(l.amount || 0) + '</td></tr>').join('') +
+    lines.map(l => '<tr><td>' + esc(l.item || '') + '</td><td class="num">' + esc(l.qty || '') + '</td><td class="num">' + fmtNum(l.rate) + '</td><td class="num">' + moneyDec(lineAmount(l)) + '</td></tr>').join('') +
     '</tbody></table></div>';
 }
 
@@ -56,9 +56,9 @@ async function extractSellerLinesFromPending(overwrite) {
         if (!item) return;
         merged.push({
           item,
-          qty: Number(l.qty) || 0,
+          qty: l.qty,
           rate: Number(l.rate) || 0,
-          amount: Number(l.amount) || 0
+          amount: lineAmount(l)
         });
       });
     } catch (e) {
@@ -77,7 +77,7 @@ async function extractSellerLinesFromPending(overwrite) {
   if (box) box.innerHTML = sellerLinesTableHtml(sellerPendingLines);
   const quotedEl = $('m-price');
   if (quotedEl && sellerPendingLines.length && (!String(quotedEl.value || '').trim() || overwrite)) {
-    const sum = sellerPendingLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+    const sum = sumLines(sellerPendingLines);
     if (sum > 0) quotedEl.value = String(Math.round(sum * 100) / 100);
   }
   if (status) {
@@ -98,21 +98,25 @@ function chip(status) {
 
 function parsePurchaseLines(p) {
   if (!p) return [{item: '', qty: '', rate: '', amount: ''}];
-  if (Array.isArray(p.lines) && p.lines.length) return p.lines;
-  if (p.lines && typeof p.lines === 'string') {
+  let lines = [];
+  if (Array.isArray(p.lines) && p.lines.length) lines = p.lines;
+  else if (p.lines && typeof p.lines === 'string') {
     try {
       const arr = JSON.parse(p.lines);
-      if (Array.isArray(arr) && arr.length) return arr;
+      if (Array.isArray(arr) && arr.length) lines = arr;
     } catch (e) {}
-  }
-  if (p.item || p.price) return [{item: p.item || '', qty: '', rate: '', amount: p.price || ''}];
-  return [{item: '', qty: '', rate: '', amount: ''}];
+  } else if (p.item || p.price) return [{item: p.item || '', qty: '', rate: '', amount: p.price || ''}];
+  if (!lines.length) return [{item: '', qty: '', rate: '', amount: ''}];
+  return lines.map(l => {
+    const computed = lineAmount(l);
+    return {item: l.item || '', qty: l.qty || '', rate: l.rate || '', amount: computed || l.amount || ''};
+  });
 }
 
 function loanReceived() { return state.funds.filter(f => f.type === 'loan').reduce((s, f) => s + (+f.amount || 0), 0); }
 function ownCash() { return state.funds.filter(f => f.type === 'cash').reduce((s, f) => s + (+f.amount || 0), 0); }
 function purchaseTotal(p) {
-  const ls = Array.isArray(p.lines) && p.lines.length ? p.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0) : 0;
+  const ls = sumLines(p && p.lines);
   return ls || +p.price || 0;
 }
 function totalSpent() { return state.purchases.reduce((s, p) => s + purchaseTotal(p), 0); }
@@ -144,10 +148,10 @@ function renderDashboard() {
     '<p class="avail-value' + (avail < 0 ? ' negative' : '') + '" id="avail-value">' + money(avail) + '</p></div>' +
     '<p class="avail-hint">Loan received + own cash − everything spent</p></div>' +
     '<div class="stat-grid">' +
-    '<div><p class="stat-label"><span class="stat-dot" style="background:var(--loan)"></span>Loan received</p><p class="stat-value" id="stat-loan" style="color:var(--loan)">' + money(loan) + '</p></div>' +
-    '<div><p class="stat-label"><span class="stat-dot" style="background:var(--ink-2)"></span>Own cash</p><p class="stat-value" id="stat-cash">' + money(cash) + '</p></div>' +
-    '<div><p class="stat-label"><span class="stat-dot" style="background:var(--spend)"></span>Spent</p><p class="stat-value" id="stat-spent" style="color:var(--spend)">' + money(spent) + '</p></div>' +
-    '<div><p class="stat-label"><span class="stat-dot" style="background:var(--accent)"></span>Pending</p><p class="stat-value" id="stat-pending">' + state.actions.filter(a => a.status !== 'done').length + '</p></div>' +
+    '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--loan)"></span>Loan received</p><p class="stat-value" id="stat-loan" style="color:var(--loan)">' + money(loan) + '</p></div>' +
+    '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--ink-2)"></span>Own cash</p><p class="stat-value" id="stat-cash">' + money(cash) + '</p></div>' +
+    '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--spend)"></span>Spent</p><p class="stat-value" id="stat-spent" style="color:var(--spend)">' + money(spent) + '</p></div>' +
+    '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--accent)"></span>Pending</p><p class="stat-value" id="stat-pending">' + state.actions.filter(a => a.status !== 'done').length + '</p></div>' +
     '</div></div>';
 
   // Smart insights
@@ -185,11 +189,11 @@ function renderDashboard() {
   html += '<div class="dash-section"><p class="dash-title">Fund health</p>';
   if (spent > 0) {
     const ratio = avail / spent;
-    if (ratio > 0.3) html += '<div class="alert-card green"><p class="alert-title">🟢 Funds healthy</p><p class="alert-body">Available funds are above 30% of total spent.</p></div>';
-    else if (ratio >= 0.1) html += '<div class="alert-card yellow"><p class="alert-title">🟡 Running low — request next tranche soon</p><p class="alert-body">Available funds are between 10–30% of total spent.</p></div>';
-    else html += '<div class="alert-card red"><p class="alert-title">🔴 Funds critical — request disbursement NOW</p><p class="alert-body">Available funds are below 10% of total spent.</p></div>';
+    if (ratio > 0.3) html += '<div class="alert-card green"><p class="alert-title">Funds healthy</p><p class="alert-body">Available funds are above 30% of total spent.</p></div>';
+    else if (ratio >= 0.1) html += '<div class="alert-card yellow"><p class="alert-title">Running low — request next tranche soon</p><p class="alert-body">Available funds are between 10–30% of total spent.</p></div>';
+    else html += '<div class="alert-card red"><p class="alert-title">Funds critical — request disbursement now</p><p class="alert-body">Available funds are below 10% of total spent.</p></div>';
   } else {
-    html += '<div class="alert-card green"><p class="alert-title">🟢 Funds healthy</p><p class="alert-body">No spending recorded yet.</p></div>';
+    html += '<div class="alert-card green"><p class="alert-title">Funds healthy</p><p class="alert-body">No spending recorded yet.</p></div>';
   }
   // Runway projection
   const thirtyDaysAgo = now - 30 * 86400000;
@@ -321,9 +325,9 @@ function sellerQuoteRows() {
       sellerId: s.id,
       seller: s.name || '',
       item: l.item || '',
-      qty: Number(l.qty) || 0,
+      qty: l.qty,
       rate: Number(l.rate) || 0,
-      amount: Number(l.amount) || 0,
+      amount: lineAmount(l),
       status: s.status || ''
     }));
   });
@@ -347,7 +351,7 @@ function sellerQuoteBodyHtml(rows) {
       : 'No extracted seller items yet. Upload seller screenshots/photos to build this table.';
     return '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--ink-2)">' + msg + '</td></tr>';
   }
-  return rows.map(r => '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.seller) + '</td><td>' + esc(r.qty || '') + '</td><td>' + money(r.rate || 0) + '</td><td>' + money(r.amount || 0) + '</td><td>' + chip(r.status) + '</td></tr>').join('');
+  return rows.map(r => '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.seller) + '</td><td class="num">' + esc(r.qty || '') + '</td><td class="num">' + moneyDec(r.rate || 0) + '</td><td class="num">' + moneyDec(lineAmount(r)) + '</td><td>' + chip(r.status) + '</td></tr>').join('');
 }
 
 function applySellerItemSearch(value) {
@@ -366,9 +370,9 @@ function renderSellers() {
     p.lines.forEach(l => {
       const item = String((l && l.item) || '').trim();
       if (!item) return;
-      const amount = Number(l.amount) || 0;
+      const amount = lineAmount(l);
       const qty = Number(l.qty) || 0;
-      const unit = qty > 0 ? amount / qty : (Number(l.rate) || 0);
+      const unit = Number(l.rate) > 0 ? Number(l.rate) : (qty > 0 ? amount / qty : 0);
       fromLines.push({item, seller, category: cat || 'Uncategorized', amount, unit, date: p.date || ''});
     });
   });
@@ -401,12 +405,12 @@ function renderSellers() {
   const bestTable = intelligence.length
     ? ('<div class="dash-section"><p class="dash-title">Best Price Intelligence (from your receipts/screenshots)</p>' +
       '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Item</th><th>Category</th><th>Best seller</th><th>Best unit</th><th>Avg unit</th><th>Worst unit</th><th>Samples</th></tr></thead><tbody>' +
-      intelligence.map(r => '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.category) + '</td><td>' + esc(r.best.seller || 'Unknown') + '</td><td>' + money(r.best.unit) + '</td><td>' + money(r.avg) + '</td><td>' + money(r.worst.unit) + '</td><td>' + r.samples + '</td></tr>').join('') +
+      intelligence.map(r => '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.category) + '</td><td>' + esc(r.best.seller || 'Unknown') + '</td><td class="num">' + moneyDec(r.best.unit) + '</td><td class="num">' + moneyDec(r.avg) + '</td><td class="num">' + moneyDec(r.worst.unit) + '</td><td class="num">' + r.samples + '</td></tr>').join('') +
       '</tbody></table></div></div>')
     : '<div class="set-note">No comparable line-item prices yet. Add more screenshots/receipts with qty and amount to unlock best-price ranking.</div>';
   return head('Seller shortlist', 'Compare suppliers and contractor quotes. Auto-rank best item prices from your purchase screenshots.', 'sellers') +
     '<div class="purchase-toolbar"><input class="seller-search-field seller-item-search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Search seller items fast…" value="' + esc(sellerItemSearch) + '"></div>' +
-    '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Item</th><th>Seller</th><th>Qty</th><th>Rate</th><th>Amount</th><th>Status</th></tr></thead><tbody id="seller-quote-tbody">' +
+    '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Item</th><th>Seller</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody id="seller-quote-tbody">' +
     sellerQuoteBodyHtml(filteredQuotes) +
     '</tbody></table></div>' +
     bestTable +
@@ -447,15 +451,13 @@ function renderPurchases() {
 
   let rows = '';
   filtered.forEach(p => {
-    const lineSum = Array.isArray(p.lines) && p.lines.length
-      ? p.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0) : 0;
-    const displayPrice = lineSum || +p.price || 0;
+    const displayPrice = purchaseTotal(p);
     rows += '<tr class="clickable" data-row-id="' + p.id + '">' +
       '<td>' + esc(p.date || '') + '</td>' +
       '<td>' + (p.thumb ? '<img src="' + p.thumb + '" class="thumb-sm" data-lightbox="' + p.id + '" alt="">' : '') + esc(p.item || '') + '</td>' +
       '<td>' + esc(p.seller || '') + '</td>' +
       '<td>' + esc(p.category || '') + '</td>' +
-      '<td style="font-family:ui-monospace,\'SF Mono\',Menlo,monospace;font-weight:600">' + money(displayPrice) + '</td>' +
+      '<td class="num tight">' + money(displayPrice) + '</td>' +
       '<td>' + esc(p.receipt || '') + '</td>' +
       '<td><div class="row-actions">' +
       '<button class="icon-btn" data-edit="purchases" data-id="' + p.id + '">Edit</button>' +
@@ -485,17 +487,15 @@ function renderPurchaseDetail(p) {
   html += '<dt>Category</dt><dd>' + esc(p.category || '—') + '</dd>';
   if (p.receipt) html += '<dt>Receipt #</dt><dd>' + esc(p.receipt) + '</dd>';
   if (p.driveLink) html += '<dt>Drive</dt><dd><a href="' + esc(p.driveLink) + '" target="_blank" rel="noopener">' + esc(p.driveFolder || 'Open in Drive') + '</a></dd>';
-  const lineSum = Array.isArray(p.lines) && p.lines.length
-    ? p.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0) : 0;
-  const displayTotal = lineSum || +p.price || 0;
-  html += '<dt>Total</dt><dd style="font-weight:600">' + money(displayTotal) + '</dd>';
+  const displayTotal = purchaseTotal(p);
+  html += '<dt>Total</dt><dd class="tight">' + moneyDec(displayTotal) + '</dd>';
   html += '</dl>';
   if (Array.isArray(p.lines) && p.lines.length) {
-    html += '<table class="detail-lines"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>';
+    html += '<table class="detail-lines"><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead><tbody>';
     p.lines.forEach(l => {
-      html += '<tr><td>' + esc(l.item || '') + '</td><td>' + esc(l.qty || '') + '</td><td>' + esc(l.rate || '') + '</td><td>' + money(l.amount) + '</td></tr>';
+      html += '<tr><td>' + esc(l.item || '') + '</td><td class="num">' + esc(l.qty || '') + '</td><td class="num">' + fmtNum(l.rate) + '</td><td class="num tight">' + moneyDec(lineAmount(l)) + '</td></tr>';
     });
-    html += '<tr style="font-weight:600;border-top:2px solid var(--line)"><td colspan="3" style="text-align:right;padding:8px 6px;color:var(--ink-2)">Total</td><td style="padding:8px 6px">' + money(displayTotal) + '</td></tr>';
+    html += '<tr class="detail-total"><td colspan="3">Total</td><td class="num tight">' + moneyDec(displayTotal) + '</td></tr>';
     html += '</tbody></table>';
   }
   return html;

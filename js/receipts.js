@@ -1,6 +1,6 @@
-import {settings, session} from './store.js?v=20260818n';
-import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc} from './util.js?v=20260818n';
-import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818n';
+import {settings, session} from './store.js?v=20260818o';
+import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines} from './util.js?v=20260818o';
+import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818o';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -72,12 +72,16 @@ function normalizeLine(ln) {
   if (typeof ln === 'string') return {item: ln, qty: '', rate: '', amount: ''};
   const amount = parseMoney(ln.amount ?? ln.total ?? ln.line_total ?? ln.lineTotal);
   const rate = parseMoney(ln.rate ?? ln.unit_price ?? ln.unitPrice ?? ln.price);
-  return {
+  const qty = ln.qty != null && ln.qty !== '' ? ln.qty : (ln.quantity != null ? ln.quantity : '');
+  const line = {
     item: String(ln.item || ln.description || ln.name || ln.product || '').trim(),
-    qty: ln.qty != null && ln.qty !== '' ? ln.qty : (ln.quantity != null ? ln.quantity : ''),
+    qty,
     rate: rate === '' ? '' : rate,
     amount: amount === '' ? '' : amount
   };
+  const computed = lineAmount(line);
+  if (computed) line.amount = computed;
+  return line;
 }
 
 export function normalizeOcr(data) {
@@ -119,16 +123,17 @@ export function purchaseLinesHtml(lines) {
 export function readLinesFromTable() {
   const body = $('m-lines');
   if (!body) return [];
-  return [...body.querySelectorAll('tr')].map(tr => ({
-    item: (tr.querySelector('.ln-item') && tr.querySelector('.ln-item').value.trim()) || '',
-    qty: (tr.querySelector('.ln-qty') && tr.querySelector('.ln-qty').value.trim()) || '',
-    rate: parseMoney(tr.querySelector('.ln-rate') && tr.querySelector('.ln-rate').value),
-    amount: parseMoney(tr.querySelector('.ln-amount') && tr.querySelector('.ln-amount').value)
-  })).filter(l => l.item || l.amount !== '');
-}
-
-function sumLines(lines) {
-  return lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+  return [...body.querySelectorAll('tr')].map(tr => {
+    const row = {
+      item: (tr.querySelector('.ln-item') && tr.querySelector('.ln-item').value.trim()) || '',
+      qty: (tr.querySelector('.ln-qty') && tr.querySelector('.ln-qty').value.trim()) || '',
+      rate: parseMoney(tr.querySelector('.ln-rate') && tr.querySelector('.ln-rate').value),
+      amount: parseMoney(tr.querySelector('.ln-amount') && tr.querySelector('.ln-amount').value)
+    };
+    const computed = lineAmount(row);
+    if (computed) row.amount = computed;
+    return row;
+  }).filter(l => l.item || l.amount !== '');
 }
 
 function syncTotalFromLines() {

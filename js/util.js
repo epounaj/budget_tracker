@@ -1,10 +1,34 @@
-import {CATEGORIES, CUR} from './config.js?v=20260818n';
+import {CATEGORIES, CUR} from './config.js?v=20260818o';
 
 export const $ = id => document.getElementById(id);
 export const todayStr = () => new Date().toISOString().slice(0, 10);
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 export const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 export const money = n => CUR + Number(n || 0).toLocaleString(undefined, {maximumFractionDigits: 0});
+export const moneyDec = n => CUR + Number(n || 0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
+export const fmtNum = n => {
+  if (n == null || n === '') return '';
+  const x = Number(n);
+  if (!Number.isFinite(x)) return String(n);
+  return x.toLocaleString(undefined, {maximumFractionDigits: 2});
+};
+
+/** Line total: Qty × Rate when both are present, otherwise the stored amount. */
+export function lineAmount(l) {
+  if (!l) return 0;
+  const qty = Number(parseMoney(l.qty));
+  const rate = Number(parseMoney(l.rate));
+  const amt = Number(parseMoney(l.amount));
+  if (Number.isFinite(qty) && qty > 0 && Number.isFinite(rate) && rate > 0) {
+    return Math.round(qty * rate * 100) / 100;
+  }
+  return Number.isFinite(amt) && amt !== 0 ? amt : 0;
+}
+
+export function sumLines(lines) {
+  if (!Array.isArray(lines) || !lines.length) return 0;
+  return lines.reduce((s, l) => s + lineAmount(l), 0);
+}
 export function parseMoney(v) {
   if (v == null || v === '') return '';
   if (typeof v === 'number' && Number.isFinite(v)) return v;

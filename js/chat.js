@@ -1,13 +1,13 @@
-import {settings, state} from './store.js?v=20260818n';
-import {$, esc, money, toast} from './util.js?v=20260818n';
-import {CUR, CATEGORIES} from './config.js?v=20260818n';
-import {hub} from './hub.js?v=20260818n';
-import {chatConfig} from './ai.js?v=20260818n';
+import {settings, state} from './store.js?v=20260818o';
+import {$, esc, money, toast, lineAmount, sumLines} from './util.js?v=20260818o';
+import {CUR, CATEGORIES} from './config.js?v=20260818o';
+import {hub} from './hub.js?v=20260818o';
+import {chatConfig} from './ai.js?v=20260818o';
 
 let history = [];
 
 function purchaseTotal(p) {
-  const ls = Array.isArray(p.lines) && p.lines.length ? p.lines.reduce((s, l) => s + (Number(l.amount) || 0), 0) : 0;
+  const ls = sumLines(p && p.lines);
   return ls || +p.price || 0;
 }
 
@@ -20,7 +20,7 @@ function buildItemPriceSnapshot(limit) {
       p.lines.forEach(l => {
         const item = String((l && l.item) || '').trim();
         if (!item) return;
-        const amount = Number(l.amount) || 0;
+        const amount = lineAmount(l);
         const rate = Number(l.rate) || 0;
         const qty = Number(l.qty) || 0;
         out.push({item, amount, rate, qty, seller, date, receipt: p.receipt || '', category: p.category || ''});

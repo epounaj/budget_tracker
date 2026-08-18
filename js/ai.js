@@ -1,7 +1,7 @@
-import {OCR_PROMPT, PROVIDER_DEFAULTS} from './config.js?v=20260818n';
-import {settings, saveSettings} from './store.js?v=20260818n';
-import {$, esc} from './util.js?v=20260818n';
-import {saveProfileToDrive} from './drive.js?v=20260818n';
+import {OCR_PROMPT, PROVIDER_DEFAULTS} from './config.js?v=20260818o';
+import {settings, saveSettings} from './store.js?v=20260818o';
+import {$, esc} from './util.js?v=20260818o';
+import {saveProfileToDrive} from './drive.js?v=20260818o';
 
 const modelsCache = {};
 
