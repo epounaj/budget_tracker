@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818l';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818l';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818l';
-import {hub} from './hub.js?v=20260818l';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818l';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818l';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818l';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818l';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818l';
+import {TITLES, CHIP} from './config.js?v=20260818m';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818m';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818m';
+import {hub} from './hub.js?v=20260818m';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818m';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818m';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818m';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818m';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818m';
 
 let sellerPendingPhotos = [];
 let sellerPendingLines = [];
@@ -312,6 +312,51 @@ function renderActions() {
   return head('Action checklist', 'Checklist sorted by due date with D-day and overdue indicators.', 'actions') +
     (state.actions.length ? '<div class="entry-list">' + items + '</div>' : empty('No actions yet', 'Add things like "Get quote for tiles".'));
 }
+
+function sellerQuoteRows() {
+  const quoteRows = [];
+  state.sellers.forEach(s => {
+    const lines = Array.isArray(s.quoteLines) ? s.quoteLines : [];
+    lines.forEach(l => quoteRows.push({
+      sellerId: s.id,
+      seller: s.name || '',
+      item: l.item || '',
+      qty: Number(l.qty) || 0,
+      rate: Number(l.rate) || 0,
+      amount: Number(l.amount) || 0,
+      status: s.status || ''
+    }));
+  });
+  return quoteRows;
+}
+
+function filterSellerQuotes(rows, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter(r =>
+    String(r.item || '').toLowerCase().includes(q) ||
+    String(r.seller || '').toLowerCase().includes(q) ||
+    String(r.status || '').toLowerCase().includes(q)
+  );
+}
+
+function sellerQuoteBodyHtml(rows) {
+  if (!rows.length) {
+    const msg = sellerItemSearch.trim()
+      ? 'No seller items match this search.'
+      : 'No extracted seller items yet. Upload seller screenshots/photos to build this table.';
+    return '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--ink-2)">' + msg + '</td></tr>';
+  }
+  return rows.map(r => '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.seller) + '</td><td>' + esc(r.qty || '') + '</td><td>' + money(r.rate || 0) + '</td><td>' + money(r.amount || 0) + '</td><td>' + chip(r.status) + '</td></tr>').join('');
+}
+
+function applySellerItemSearch(value) {
+  sellerItemSearch = value;
+  const tbody = $('seller-quote-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = sellerQuoteBodyHtml(filterSellerQuotes(sellerQuoteRows(), sellerItemSearch));
+}
+
 function renderSellers() {
   const fromLines = [];
   state.purchases.forEach(p => {
@@ -342,25 +387,7 @@ function renderSellers() {
     return {item: x.item, category: x.category, best, worst, avg, samples: priced.length};
   }).filter(Boolean).sort((a, b) => (a.best.unit - b.best.unit)).slice(0, 80);
 
-  const quoteRows = [];
-  state.sellers.forEach(s => {
-    const lines = Array.isArray(s.quoteLines) ? s.quoteLines : [];
-    lines.forEach(l => quoteRows.push({
-      sellerId: s.id,
-      seller: s.name || '',
-      item: l.item || '',
-      qty: Number(l.qty) || 0,
-      rate: Number(l.rate) || 0,
-      amount: Number(l.amount) || 0,
-      status: s.status || ''
-    }));
-  });
-  const q = sellerItemSearch.trim().toLowerCase();
-  const filteredQuotes = q ? quoteRows.filter(r =>
-    String(r.item || '').toLowerCase().includes(q) ||
-    String(r.seller || '').toLowerCase().includes(q) ||
-    String(r.status || '').toLowerCase().includes(q)
-  ) : quoteRows;
+  const filteredQuotes = filterSellerQuotes(sellerQuoteRows(), sellerItemSearch);
 
   const items = state.sellers.map(s => '<div class="entry"><div class="entry-top"><div><p class="entry-name">' + esc(s.name) + '</p>' +
     (s.contact ? '<p class="entry-sub">' + esc(s.contact) + '</p>' : '') + '</div>' + chip(s.status) + '</div>' +
@@ -378,9 +405,9 @@ function renderSellers() {
       '</tbody></table></div></div>')
     : '<div class="set-note">No comparable line-item prices yet. Add more screenshots/receipts with qty and amount to unlock best-price ranking.</div>';
   return head('Seller shortlist', 'Compare suppliers and contractor quotes. Auto-rank best item prices from your purchase screenshots.', 'sellers') +
-    '<div class="purchase-toolbar"><input class="seller-search-field seller-item-search" placeholder="Search seller items fast…" value="' + esc(sellerItemSearch) + '"></div>' +
-    '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Item</th><th>Seller</th><th>Qty</th><th>Rate</th><th>Amount</th><th>Status</th></tr></thead><tbody>' +
-    (filteredQuotes.length ? filteredQuotes.map(r => '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.seller) + '</td><td>' + esc(r.qty || '') + '</td><td>' + money(r.rate || 0) + '</td><td>' + money(r.amount || 0) + '</td><td>' + chip(r.status) + '</td></tr>').join('') : '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--ink-2)">No extracted seller items yet. Upload seller screenshots/photos to build this table.</td></tr>') +
+    '<div class="purchase-toolbar"><input class="seller-search-field seller-item-search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Search seller items fast…" value="' + esc(sellerItemSearch) + '"></div>' +
+    '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Item</th><th>Seller</th><th>Qty</th><th>Rate</th><th>Amount</th><th>Status</th></tr></thead><tbody id="seller-quote-tbody">' +
+    sellerQuoteBodyHtml(filteredQuotes) +
     '</tbody></table></div>' +
     bestTable +
     (state.sellers.length ? '<div class="entry-list">' + items + '</div>' : empty('No sellers shortlisted yet', 'Add suppliers with their quoted price and status.'));
@@ -526,7 +553,7 @@ function attach() {
   });
   const sellerSearchEl = root.querySelector('.seller-item-search');
   if (sellerSearchEl) {
-    sellerSearchEl.oninput = e => { sellerItemSearch = e.target.value; render(); };
+    sellerSearchEl.oninput = e => applySellerItemSearch(e.target.value);
   }
   const searchEl = root.querySelector('.purchase-search');
   if (searchEl) {

@@ -9,12 +9,12 @@
  *   ui.js        lists, sticky Save modal, settings
  *   csv.js       export/import
  */
-import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818l';
-import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818l';
-import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818l';
-import {bindShell} from './ui.js?v=20260818l';
-import {initChat} from './chat.js?v=20260818l';
-import {appClientId} from './drive.js?v=20260818l';
+import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818m';
+import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818m';
+import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818m';
+import {bindShell} from './ui.js?v=20260818m';
+import {initChat} from './chat.js?v=20260818m';
+import {appClientId} from './drive.js?v=20260818m';
 
 bindShell();
 initChat();
