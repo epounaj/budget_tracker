@@ -6,7 +6,7 @@ import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, c
 import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto} from './receipts.js';
 import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js';
 import {downloadCSV, importCSVFile} from './csv.js';
-import {googleLogout} from './auth.js';
+import {googleLogout, startGoogleLogin} from './auth.js';
 
 const chip = s => { const m = CHIP[s] || ['pending', s || '—']; return '<span class="chip ' + m[0] + '">' + m[1] + '</span>'; };
 
@@ -424,7 +424,8 @@ export function bindShell() {
   $('open-settings').onclick = () => { renderSettings(); $('settings-overlay').classList.add('show'); };
   $('settings-overlay').addEventListener('click', e => { if (e.target.id === 'settings-overlay') $('settings-overlay').classList.remove('show'); });
   $('sync-pill').addEventListener('click', () => {
-    if (!settings.driveToken) hub.showLogin();
+    if (settings.driveToken && session.syncStatus !== 'error') return;
+    startGoogleLogin(false);
   });
 }
 

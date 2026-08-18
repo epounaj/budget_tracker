@@ -10,8 +10,8 @@
  *   csv.js       export/import
  */
 import {GOOGLE_CLIENT_ID} from './config.js';
-import {loadAll, settings, session} from './store.js';
-import {renderLogin, loadGis, startGoogleLogin} from './auth.js';
+import {loadAll, settings, session, restoreSavedToken} from './store.js';
+import {renderLogin, loadGis, resumeSession} from './auth.js';
 import {bindShell} from './ui.js';
 import {appClientId} from './drive.js';
 
@@ -21,11 +21,11 @@ bindShell();
   renderLogin();
   try {
     await loadAll();
+    restoreSavedToken();
     session.lastClientId = GOOGLE_CLIENT_ID || settings.driveClientId || '';
     await loadGis();
     if (settings.user && appClientId()) {
-      renderLogin({busy: true});
-      startGoogleLogin(true);
+      await resumeSession();
       return;
     }
   } catch (e) { console.error(e); }

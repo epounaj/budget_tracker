@@ -1,5 +1,5 @@
 import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js';
-import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty} from './store.js';
+import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, clearSavedToken} from './store.js';
 import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage} from './util.js';
 import {toCSV, fromCSV} from './csv.js';
 import {hub} from './hub.js';
@@ -18,7 +18,7 @@ export async function driveFetch(url, opts) {
   opts = opts || {};
   opts.headers = Object.assign({'Authorization': 'Bearer ' + settings.driveToken}, opts.headers || {});
   const r = await fetch(url, opts);
-  if (r.status === 401) { settings.driveToken = null; throw new Error('Drive session expired — sign in again'); }
+  if (r.status === 401) { clearSavedToken(); throw new Error('Drive session expired — sign in again'); }
   if (!r.ok) {
     let msg = 'Google Drive error ' + r.status, reason = '';
     try {

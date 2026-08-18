@@ -4,6 +4,7 @@ export const GOOGLE_CLIENT_ID = '379149446558-pk7favl7g2hj1dugkhqog4kbb56aut0r.a
 export const PROFILE_FILE = 'site-ledger-settings.json';
 export const CSV_FILE = 'site-ledger.csv';
 export const DB_NAME = 'siteledger';
+export const TOKEN_KEY = 'siteledger.oauth';
 export const STORES = ['funds', 'budget', 'actions', 'sellers', 'purchases', 'meta'];
 export const LOGIN_SCOPE = 'openid email profile https://www.googleapis.com/auth/drive.file';
 export const CATEGORIES = [

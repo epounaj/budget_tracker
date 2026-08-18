@@ -1,10 +1,10 @@
-import {DB_NAME, STORES} from './config.js';
+import {DB_NAME, STORES, TOKEN_KEY} from './config.js';
 
 let db;
 export let state = {funds: [], budget: [], actions: [], sellers: [], purchases: []};
 export let settings = {
   provider: 'openai', apiKey: '', model: '', apiBase: '', models: [], profiles: {},
-  driveClientId: '', driveToken: null, driveFolderId: '', user: null, userSub: '', autoCsv: true,
+  driveClientId: '', driveToken: null, driveTokenExp: 0, driveFolderId: '', user: null, userSub: '', autoCsv: true,
   csvSyncedAt: '', csvDirty: false
 };
 export let session = {
@@ -124,6 +124,43 @@ export function applyStashedAi(sub) {
 }
 export async function saveSettings() {
   if (settings.userSub) stashAi(settings.userSub);
-  const snap = Object.assign({}, settings, {driveToken: null});
+  const snap = Object.assign({}, settings, {driveToken: null, driveTokenExp: 0});
   await idbSetMeta('settings', snap);
+}
+
+export function persistOauth(token, expiresIn, sub) {
+  const sec = Number(expiresIn) > 0 ? Number(expiresIn) : 3600;
+  settings.driveToken = token;
+  settings.driveTokenExp = Date.now() + sec * 1000;
+  try {
+    localStorage.setItem(TOKEN_KEY, JSON.stringify({
+      token, exp: settings.driveTokenExp, sub: sub || settings.userSub || ''
+    }));
+  } catch (e) {}
+}
+
+export function restoreSavedToken() {
+  try {
+    const o = JSON.parse(localStorage.getItem(TOKEN_KEY) || 'null');
+    if (!o || !o.token || !o.exp || o.exp < Date.now() + 20000) {
+      clearSavedToken();
+      return false;
+    }
+    if (o.sub && settings.userSub && o.sub !== settings.userSub) return false;
+    settings.driveToken = o.token;
+    settings.driveTokenExp = o.exp;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export function clearSavedToken() {
+  settings.driveToken = null;
+  settings.driveTokenExp = 0;
+  try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+}
+
+export function tokenIsFresh() {
+  return !!(settings.driveToken && settings.driveTokenExp && settings.driveTokenExp > Date.now() + 20000);
 }

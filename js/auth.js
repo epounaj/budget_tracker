@@ -1,5 +1,5 @@
 import {LOGIN_SCOPE, G_ICON} from './config.js';
-import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger} from './store.js';
+import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger, persistOauth, clearSavedToken, tokenIsFresh} from './store.js';
 import {$, esc, toast} from './util.js';
 import {hub} from './hub.js';
 import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, reconcileLedgerWithDrive} from './drive.js';
@@ -52,6 +52,18 @@ export function renderLogin(opts) {
   const btn = $('google-login');
   if (btn) btn.onclick = () => startGoogleLogin(false);
 }
+function loginScreenOpen() {
+  const el = $('login-screen');
+  return !!(el && el.classList.contains('show'));
+}
+function failAuth(err, silent) {
+  if (loginScreenOpen() && !session.loggedIn) {
+    renderLogin();
+    if (!silent) loginErr((err && (err.message || err.type || err.error_description)) || 'Sign-in cancelled.');
+    return;
+  }
+  hub.updateSyncPill();
+}
 export function startGoogleLogin(silent) {
   if (!secureContext()) return loginErr('Needs https or localhost.');
   const cid = appClientId() || session.lastClientId;
@@ -62,39 +74,44 @@ export function startGoogleLogin(silent) {
     return loginErr('Google script still loading — wait a second and tap again.');
   }
   const b = $('google-login');
-  if (b && !silent) { b.disabled = true; b.innerHTML = G_ICON + 'Signing in…'; }
+  if (b && !silent && loginScreenOpen()) { b.disabled = true; b.innerHTML = G_ICON + 'Signing in…'; }
   const gTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: cid, scope: LOGIN_SCOPE,
     callback: async resp => {
       if (!resp || !resp.access_token) {
-        renderLogin();
-        if (!silent) loginErr(resp && resp.error_description || 'Sign-in cancelled.');
+        failAuth(resp, silent);
         return;
       }
-      try { settings.driveClientId = cid; await completeLogin(resp.access_token, silent); }
-      catch (e) {
-        renderLogin();
-        if (!silent) loginErr(e.message || 'Sign-in failed.');
-        else toast(e.message || 'Could not refresh Google session');
-      }
+      try { settings.driveClientId = cid; await completeLogin(resp.access_token, silent, resp.expires_in); }
+      catch (e) { failAuth(e, silent); }
     },
-    error_callback: err => {
-      renderLogin();
-      if (silent) return;
-      loginErr((err && (err.message || err.type)) || 'Popup blocked. Allow popups for this site and try again.');
-    }
+    error_callback: err => failAuth(err, silent)
   });
-  gTokenClient.requestAccessToken({prompt: silent ? '' : 'select_account'});
-  if (silent) {
-    setTimeout(() => {
-      if (!session.loggedIn) renderLogin();
-    }, 4500);
-  }
+  gTokenClient.requestAccessToken({prompt: silent ? 'none' : (session.loggedIn ? '' : 'select_account')});
 }
-async function completeLogin(token, quiet) {
-  settings.driveToken = token;
+export async function resumeSession() {
+  if (!settings.user || !appClientId()) return false;
+  hideLogin();
+  hub.updateUserChip();
+  hub.render();
+  if (tokenIsFresh()) {
+    try {
+      await completeLogin(settings.driveToken, true, Math.max(60, Math.floor((settings.driveTokenExp - Date.now()) / 1000)));
+      return true;
+    } catch (e) {
+      clearSavedToken();
+    }
+  }
+  startGoogleLogin(true);
+  return true;
+}
+async function completeLogin(token, quiet, expiresIn) {
+  persistOauth(token, expiresIn, settings.userSub);
   const ur = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {headers: {Authorization: 'Bearer ' + token}});
-  if (!ur.ok) throw new Error('Could not read Google profile');
+  if (!ur.ok) {
+    clearSavedToken();
+    throw new Error('Could not read Google profile');
+  }
   const u = await ur.json();
   if (settings.userSub && settings.userSub !== u.sub) {
     stashAi(settings.userSub);
@@ -107,6 +124,7 @@ async function completeLogin(token, quiet) {
   settings.user = {email: u.email, name: u.name, picture: u.picture};
   settings.userSub = u.sub;
   settings.autoCsv = true;
+  persistOauth(token, expiresIn, u.sub);
   await saveSettings();
   hideLogin();
   hub.updateUserChip();
@@ -128,7 +146,8 @@ export async function googleLogout() {
   if (tok && window.google && google.accounts && google.accounts.oauth2) try { google.accounts.oauth2.revoke(tok, () => {}); } catch (e) {}
   stashAi(settings.userSub);
   settings.apiKey = ''; settings.model = ''; settings.apiBase = ''; settings.models = [];
-  settings.driveToken = null; settings.user = null; settings.userSub = '';
+  settings.user = null; settings.userSub = '';
+  clearSavedToken();
   await saveSettings();
   hub.updateUserChip();
   showLogin();
