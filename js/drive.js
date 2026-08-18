@@ -1,8 +1,8 @@
-import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818g';
-import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, clearSavedToken} from './store.js?v=20260818g';
-import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage} from './util.js?v=20260818g';
-import {toCSV, fromCSV} from './csv.js?v=20260818g';
-import {hub} from './hub.js?v=20260818g';
+import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818h';
+import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, clearSavedToken} from './store.js?v=20260818h';
+import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage} from './util.js?v=20260818h';
+import {toCSV, fromCSV} from './csv.js?v=20260818h';
+import {hub} from './hub.js?v=20260818h';
 
 export function appClientId() {
   const inp = $('login-client-id');
@@ -242,6 +242,26 @@ export async function uploadOriginalToDrive(fileOrBlob, info) {
   const r = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {method: 'POST', body: form});
   const out = await r.json();
   out.folderPath = 'Site Ledger / Receipts / ' + catName;
+  return out;
+}
+
+/** Upload seller reference images (storefront, quote screenshot, catalog, etc). */
+export async function uploadSellerOriginalToDrive(fileOrBlob, info) {
+  info = info || {};
+  await ensureDriveFolder();
+  const sellersId = await ensureChildFolder(settings.driveFolderId, 'Sellers');
+  const sellerName = folderSafe(info.name) || 'Unknown Seller';
+  const sellerId = await ensureChildFolder(sellersId, sellerName);
+  const ext = info.ext || extFromFile(fileOrBlob) || 'jpg';
+  const bits = [info.date || todayStr(), sellerName, folderSafe(info.item), folderSafe(info.tag)].filter(Boolean);
+  const fname = (bits.join('_') || ('seller-' + todayStr())).slice(0, 90) + '.' + ext;
+  const blob = fileOrBlob instanceof Blob ? fileOrBlob : dataURLtoBlob(fileOrBlob);
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify({name: fname, parents: [sellerId]})], {type: 'application/json'}));
+  form.append('file', blob, fname);
+  const r = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {method: 'POST', body: form});
+  const out = await r.json();
+  out.folderPath = 'Site Ledger / Sellers / ' + sellerName;
   return out;
 }
 

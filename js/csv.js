@@ -1,7 +1,7 @@
-import {uid} from './util.js?v=20260818g';
-import {state, persist, replaceLedger} from './store.js?v=20260818g';
-import {hub} from './hub.js?v=20260818g';
-import {toast, todayStr} from './util.js?v=20260818g';
+import {uid} from './util.js?v=20260818h';
+import {state, persist, replaceLedger} from './store.js?v=20260818h';
+import {hub} from './hub.js?v=20260818h';
+import {toast, todayStr} from './util.js?v=20260818h';
 
 function csvCell(v) {
   if (v == null) return '';
@@ -38,7 +38,10 @@ export function toCSV() {
   push('funds', state.funds, ['id', 'type', 'label', 'amount', 'date', 'notes']);
   push('budget', state.budget, ['id', 'category', 'budgeted', 'notes']);
   push('actions', state.actions, ['id', 'title', 'due', 'status', 'notes']);
-  push('sellers', state.sellers, ['id', 'name', 'contact', 'item', 'price', 'status', 'notes']);
+  push('sellers', state.sellers.map(s => Object.assign({}, s, {
+    photos: Array.isArray(s.photos) ? JSON.stringify(s.photos) : (s.photos || ''),
+    photoLinks: Array.isArray(s.photoLinks) ? JSON.stringify(s.photoLinks) : (s.photoLinks || '')
+  })), ['id', 'name', 'contact', 'item', 'price', 'status', 'notes', 'photos', 'photoLinks']);
   push('purchases', state.purchases.map(p => Object.assign({}, p, {
     lines: Array.isArray(p.lines) ? JSON.stringify(p.lines) : (p.lines || ''),
     driveFileIds: Array.isArray(p.driveFileIds) ? JSON.stringify(p.driveFileIds) : (p.driveFileIds || ''),
@@ -61,6 +64,12 @@ export function fromCSV(text) {
     ['amount', 'budgeted', 'price'].forEach(n => { if (o[n] !== undefined && o[n] !== '') o[n] = +o[n]; });
     if (o.lines && typeof o.lines === 'string' && o.lines.trim().startsWith('[')) {
       try { o.lines = JSON.parse(o.lines); } catch (e) {}
+    }
+    if (o.photos && typeof o.photos === 'string' && o.photos.trim().startsWith('[')) {
+      try { o.photos = JSON.parse(o.photos); } catch (e) {}
+    }
+    if (o.photoLinks && typeof o.photoLinks === 'string' && o.photoLinks.trim().startsWith('[')) {
+      try { o.photoLinks = JSON.parse(o.photoLinks); } catch (e) {}
     }
     if (o.driveFileIds && typeof o.driveFileIds === 'string' && o.driveFileIds.trim().startsWith('[')) {
       try { o.driveFileIds = JSON.parse(o.driveFileIds); } catch (e) {}

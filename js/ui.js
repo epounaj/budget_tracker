@@ -1,12 +1,14 @@
-import {TITLES, CHIP} from './config.js?v=20260818g';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818g';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818g';
-import {hub} from './hub.js?v=20260818g';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818g';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818g';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818g';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818g';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818g';
+import {TITLES, CHIP} from './config.js?v=20260818h';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818h';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818h';
+import {hub} from './hub.js?v=20260818h';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818h';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818h';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818h';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818h';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818h';
+
+let sellerPendingPhotos = [];
 
 function chip(status) {
   const map = CHIP || {};
@@ -231,6 +233,8 @@ function renderSellers() {
 
   const items = state.sellers.map(s => '<div class="entry"><div class="entry-top"><div><p class="entry-name">' + esc(s.name) + '</p>' +
     (s.contact ? '<p class="entry-sub">' + esc(s.contact) + '</p>' : '') + '</div>' + chip(s.status) + '</div>' +
+    (Array.isArray(s.photos) && s.photos.length ? ('<div class="photo-list" style="margin-top:8px">' + s.photos.slice(0, 6).map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-lightbox="' + s.id + ':' + i + '" alt="Seller photo">').join('') + '</div>') : '') +
+    (Array.isArray(s.photoLinks) && s.photoLinks.length ? ('<div class="entry-meta">' + s.photoLinks.slice(0, 3).map((ln, i) => '<a href="' + esc(ln.webViewLink || ln.url || '#') + '" target="_blank" rel="noopener">Photo ' + (i + 1) + '</a>').join(' ') + '</div>') : '') +
     '<div class="entry-meta">' + (s.item ? '<span class="meta-item">' + esc(s.item) + '</span>' : '') +
     ((s.price !== '' && s.price != null) ? '<span class="meta-item">Quoted <strong>' + money(s.price) + '</strong></span>' : '') +
     (s.notes ? '<span class="meta-item">' + esc(s.notes) + '</span>' : '') + '</div>' +
@@ -375,6 +379,16 @@ function attach() {
     if (r && r.driveLink) { window.open(r.driveLink, '_blank', 'noopener'); return; }
     if (r && r.thumb) { $('lightbox-img').src = r.thumb; $('lightbox').classList.add('show'); }
   });
+  root.querySelectorAll('[data-seller-lightbox]').forEach(im => im.onclick = e => {
+    e.stopPropagation();
+    const [sid, idx] = String(im.dataset.sellerLightbox || '').split(':');
+    const s = state.sellers.find(x => x.id === sid);
+    if (!s || !Array.isArray(s.photos)) return;
+    const ph = s.photos[Number(idx) || 0];
+    if (!ph) return;
+    $('lightbox-img').src = ph.url || ph.thumb || '';
+    $('lightbox').classList.add('show');
+  });
   const searchEl = root.querySelector('.purchase-search');
   if (searchEl) {
     searchEl.oninput = e => { purchaseSearch = e.target.value; render(); };
@@ -429,7 +443,8 @@ function formBody(kind, p) {
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div></div>';
   }
   if (kind === 'sellers') {
-    p = p || {name: '', contact: '', item: '', price: '', status: 'shortlisted', notes: ''};
+    p = p || {name: '', contact: '', item: '', price: '', status: 'shortlisted', notes: '', photos: [], photoLinks: []};
+    const curPhotos = sellerPendingPhotos.length ? sellerPendingPhotos : (Array.isArray(p.photos) ? p.photos : []);
     return '<div class="form-grid">' +
       '<div class="field wide"><label class="req">Name</label><input id="m-name" value="' + esc(p.name) + '" placeholder="e.g. ABC Hardware" autocomplete="off"></div>' +
       '<div class="field"><label>For</label><input list="category-options" id="m-item" value="' + esc(p.item) + '" placeholder="e.g. Roof tiles"></div>' +
@@ -440,6 +455,10 @@ function formBody(kind, p) {
       '<option value="contacted"' + (p.status === 'contacted' ? ' selected' : '') + '>Contacted</option>' +
       '<option value="selected"' + (p.status === 'selected' ? ' selected' : '') + '>Selected</option>' +
       '<option value="rejected"' + (p.status === 'rejected' ? ' selected' : '') + '>Rejected</option></select></div>' +
+      '<div class="field wide"><label>Photos (storefront / quote screenshot)</label>' +
+      '<div class="photo-actions"><label class="photo-btn">Add photos<input type="file" accept="image/*" multiple id="m-seller-photo" style="display:none"></label></div>' +
+      '<div class="photo-list" id="m-seller-photo-list">' + curPhotos.map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-modal-photo="' + i + '" alt="Seller photo ' + (i + 1) + '">').join('') + '</div>' +
+      '<button type="button" class="photo-remove" id="m-seller-photo-remove" style="' + (curPhotos.length ? '' : 'display:none') + '">Remove all seller photos</button></div>' +
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div></div>';
   }
   if (kind === 'purchases') {
@@ -486,6 +505,7 @@ export function openModal(kind, rec) {
   session.editing = rec || null;
   session.photoCleared = false;
   clearPendingPhoto();
+  sellerPendingPhotos = [];
   const title = (rec ? TITLES[kind][1] : TITLES[kind][0]);
   const sub = {
     funds: 'How much came in, and from where.',
@@ -515,6 +535,8 @@ export function closeModal() {
   session.editKind = null;
   session.photoCleared = false;
   clearPendingPhoto();
+  sellerPendingPhotos.forEach(ph => { if (ph && ph.url && ph.url.startsWith('blob:')) try { URL.revokeObjectURL(ph.url); } catch (e) {} });
+  sellerPendingPhotos = [];
 }
 
 function bindModal() {
@@ -550,6 +572,30 @@ function bindModal() {
     for (const f of files) await handlePhoto(f, true);
     await maybeScanAfterPhoto();
   });
+  const sellerIn = $('m-seller-photo');
+  if (sellerIn) sellerIn.addEventListener('change', async e => {
+    const fs = [...(e.target.files || [])];
+    if (!fs.length) return;
+    for (const f of fs) {
+      const thumb = await compressImage(f, 360, 0.6);
+      let url = '';
+      try { url = URL.createObjectURL(f); } catch (err) {}
+      sellerPendingPhotos.push({file: f, ext: extFromFile(f), thumb: thumb || url, url: url || thumb});
+    }
+    const list = $('m-seller-photo-list');
+    if (list) list.innerHTML = sellerPendingPhotos.map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-modal-photo="' + i + '" alt="Seller photo ' + (i + 1) + '">').join('');
+    const rm = $('m-seller-photo-remove');
+    if (rm) rm.style.display = sellerPendingPhotos.length ? '' : 'none';
+    e.target.value = '';
+  });
+  const rmSeller = $('m-seller-photo-remove');
+  if (rmSeller) rmSeller.onclick = () => {
+    sellerPendingPhotos.forEach(ph => { if (ph && ph.url && ph.url.startsWith('blob:')) try { URL.revokeObjectURL(ph.url); } catch (e) {} });
+    sellerPendingPhotos = [];
+    const list = $('m-seller-photo-list');
+    if (list) list.innerHTML = '';
+    rmSeller.style.display = 'none';
+  };
   wireModelPicker('m-ai', 'm-ai-custom');
   bindLineTable();
 }
@@ -583,6 +629,26 @@ async function saveModal() {
     const pr = val('m-price');
     if (pr !== '' && (!finiteNum(pr) || +pr < 0)) return showErr('Enter a valid quoted price, or leave it blank.');
     obj = {name: n, contact: val('m-contact').trim(), item: val('m-item').trim(), price: pr === '' ? '' : +pr, status: val('m-status'), notes: val('m-notes').trim()};
+    if (sellerPendingPhotos.length) {
+      obj.photos = sellerPendingPhotos.map(ph => ({thumb: ph.thumb, url: ph.url}));
+      if (settings.driveToken) {
+        const links = [];
+        for (const ph of sellerPendingPhotos) {
+          try {
+            const up = await uploadSellerOriginalToDrive(ph.file || ph.url, {
+              name: obj.name, item: obj.item, date: todayStr(), ext: ph.ext
+            });
+            if (up) links.push({id: up.id, webViewLink: up.webViewLink, folderPath: up.folderPath || ''});
+          } catch (e) {}
+        }
+        obj.photoLinks = links;
+      } else {
+        obj.photoLinks = [];
+      }
+    } else if (session.editing && Array.isArray(session.editing.photos)) {
+      obj.photos = session.editing.photos.slice();
+      obj.photoLinks = Array.isArray(session.editing.photoLinks) ? session.editing.photoLinks.slice() : [];
+    }
   } else if (k === 'purchases') {
     const form = readPurchaseForm();
     if (!form.item) return showErr('Enter a summary or at least one line item.');
@@ -647,6 +713,8 @@ async function saveModal() {
   else { obj.id = uid(); state[k].push(obj); }
   await persist(k);
   closeModal();
+  sellerPendingPhotos.forEach(ph => { if (ph && ph.url && ph.url.startsWith('blob:')) try { URL.revokeObjectURL(ph.url); } catch (e) {} });
+  sellerPendingPhotos = [];
   render();
   if (settings.driveToken) scheduleCsvSync();
   } catch (e) {
