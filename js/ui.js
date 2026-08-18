@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js?v=20260818p';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818p';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile, lineAmount, sumLines, purchaseCategories, summarizePurchase} from './util.js?v=20260818p';
-import {hub} from './hub.js?v=20260818p';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818p';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr, categoryPillsHtml} from './receipts.js?v=20260818p';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818p';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818p';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818p';
+import {TITLES, CHIP} from './config.js?v=20260818q';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818q';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile, lineAmount, sumLines, purchaseCategories, summarizePurchase} from './util.js?v=20260818q';
+import {hub} from './hub.js?v=20260818q';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818q';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr, categoryPillsHtml} from './receipts.js?v=20260818q';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818q';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818q';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818q';
 
 let sellerPendingPhotos = [];
 let sellerPendingLines = [];
@@ -999,6 +999,7 @@ async function saveModal() {
     }
   }
   if (!obj) return;
+  obj.updatedAt = new Date().toISOString();
   if (editing) Object.assign(editing, obj);
   else { obj.id = uid(); state[k].push(obj); }
   await persist(k);
@@ -1117,9 +1118,13 @@ export function bindShell() {
   $('lightbox').addEventListener('click', e => { if (e.target.id === 'lightbox') $('lightbox').classList.remove('show'); });
   $('open-settings').onclick = () => { renderSettings(); $('settings-overlay').classList.add('show'); };
   $('settings-overlay').addEventListener('click', e => { if (e.target.id === 'settings-overlay') $('settings-overlay').classList.remove('show'); });
-  $('sync-pill').addEventListener('click', () => {
-    if (settings.driveToken && session.syncStatus !== 'error') return;
-    startGoogleLogin(false);
+  $('sync-pill').addEventListener('click', async () => {
+    if (session.syncStatus === 'error' && settings.driveToken) {
+      try { await hub.reconcileLedgerWithDrive(); }
+      catch (e) { toast(e.message || 'Drive sync failed'); }
+      return;
+    }
+    if (!settings.driveToken) startGoogleLogin(false);
   });
   const fab = $('fab-add');
   if (fab) fab.onclick = () => {

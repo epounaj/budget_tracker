@@ -1,8 +1,8 @@
-import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818p';
-import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, clearSavedToken} from './store.js?v=20260818p';
-import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage, driveFolderName} from './util.js?v=20260818p';
-import {toCSV, fromCSV} from './csv.js?v=20260818p';
-import {hub} from './hub.js?v=20260818p';
+import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818q';
+import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, ledgerRecordCount, snapshotLedger, mergeLedgers, LEDGER_STORES, clearSavedToken} from './store.js?v=20260818q';
+import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage, driveFolderName} from './util.js?v=20260818q';
+import {toCSV, fromCSV} from './csv.js?v=20260818q';
+import {hub} from './hub.js?v=20260818q';
 
 export function appClientId() {
   const inp = $('login-client-id');
@@ -39,26 +39,40 @@ export async function driveFetch(url, opts) {
   throw new Error('Drive request failed');
 }
 
+async function listSiteLedgerFolders() {
+  const q = encodeURIComponent("name='Site Ledger' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+  const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,createdTime)&spaces=drive&orderBy=createdTime&pageSize=100');
+  const j = await r.json();
+  return j.files || [];
+}
+
+async function csvMetaInFolder(folderId) {
+  const q = encodeURIComponent("name='" + driveQueryName(CSV_FILE) + "' and '" + folderId + "' in parents and trashed=false");
+  const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,modifiedTime,size)&spaces=drive&orderBy=modifiedTime%20desc');
+  const j = await r.json();
+  return (j.files && j.files[0]) || null;
+}
+
+/** Pick one Site Ledger folder: newest CSV wins. Cached ids must not pin a stale duplicate. */
 export async function ensureDriveFolder() {
   if (!settings.driveToken) throw new Error('Sign in first');
-  if (settings.driveFolderId) {
-    try {
-      const chk = await driveFetch('https://www.googleapis.com/drive/v3/files/' + settings.driveFolderId + '?fields=id,name,trashed');
-      const info = await chk.json();
-      if (info.id && !info.trashed) return settings.driveFolderId;
-    } catch (e) { settings.driveFolderId = ''; }
+  const folders = await listSiteLedgerFolders();
+  const scored = [];
+  for (const f of folders) scored.push({folder: f, csv: await csvMetaInFolder(f.id)});
+  const withCsv = scored.filter(x => x.csv);
+  let chosen = null;
+  if (withCsv.length) {
+    withCsv.sort((a, b) => {
+      const ta = Date.parse(a.csv.modifiedTime) || 0;
+      const tb = Date.parse(b.csv.modifiedTime) || 0;
+      if (tb !== ta) return tb - ta;
+      return (Number(b.csv.size) || 0) - (Number(a.csv.size) || 0);
+    });
+    chosen = withCsv[0].folder;
+  } else if (folders.length) {
+    chosen = folders.find(f => f.id === settings.driveFolderId) || folders[0];
   }
-  const q = encodeURIComponent("name='Site Ledger' and mimeType='application/vnd.google-apps.folder' and trashed=false");
-  const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,createdTime)&spaces=drive&orderBy=createdTime');
-  const j = await r.json();
-  const folders = j.files || [];
-  if (folders.length) {
-    let chosen = folders[0];
-    for (const f of folders) {
-      if (await findDriveChild(f.id, CSV_FILE, false)) { chosen = f; break; }
-    }
-    settings.driveFolderId = chosen.id;
-  } else {
+  if (!chosen) {
     const cr = await driveFetch('https://www.googleapis.com/drive/v3/files', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({name: 'Site Ledger', mimeType: 'application/vnd.google-apps.folder', parents: ['root']})
@@ -66,6 +80,8 @@ export async function ensureDriveFolder() {
     const cj = await cr.json();
     if (!cj.id) throw new Error('Google did not create the Site Ledger folder');
     settings.driveFolderId = cj.id;
+  } else {
+    settings.driveFolderId = chosen.id;
   }
   await saveSettings();
   return settings.driveFolderId;
@@ -74,7 +90,7 @@ export async function ensureDriveFolder() {
 async function findDriveChild(parentId, name, folderOnly) {
   const extra = folderOnly ? " and mimeType='application/vnd.google-apps.folder'" : '';
   const q = encodeURIComponent("name='" + driveQueryName(name) + "' and '" + parentId + "' in parents and trashed=false" + extra);
-  const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,createdTime)&spaces=drive&orderBy=createdTime');
+  const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,modifiedTime)&spaces=drive&orderBy=modifiedTime%20desc');
   const j = await r.json();
   return (j.files && j.files[0] && j.files[0].id) || null;
 }
@@ -113,7 +129,7 @@ export async function findDriveFile(name) {
 export async function findDriveFileMeta(name) {
   await ensureDriveFolder();
   const q = encodeURIComponent("name='" + driveQueryName(name) + "' and '" + settings.driveFolderId + "' in parents and trashed=false");
-  const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,modifiedTime)&spaces=drive');
+  const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,modifiedTime)&spaces=drive&orderBy=modifiedTime%20desc');
   const j = await r.json();
   return (j.files && j.files[0]) || null;
 }
@@ -150,16 +166,24 @@ export async function saveProfileToDrive() {
   await upsertDriveFile(PROFILE_FILE, blob);
 }
 
-async function applyDriveCsv(meta) {
-  const r = await driveFetch('https://www.googleapis.com/drive/v3/files/' + meta.id + '?alt=media');
-  if (!r.ok) throw new Error('Could not read ledger from Drive');
-  replaceLedger(fromCSV(await r.text()));
-  for (const s of ['funds', 'budget', 'actions', 'sellers', 'purchases']) await persist(s, {fromSync: true});
+async function applyLedger(ledger, meta) {
+  replaceLedger(ledger);
+  for (const s of LEDGER_STORES) await persist(s, {fromSync: true});
   settings.csvDirty = false;
-  settings.csvSyncedAt = meta.modifiedTime || new Date().toISOString();
+  settings.csvSyncedAt = (meta && meta.modifiedTime) || new Date().toISOString();
   await saveSettings();
   hub.render();
   hydratePurchaseThumbs();
+}
+
+async function loadCsvFromMeta(meta) {
+  const r = await driveFetch('https://www.googleapis.com/drive/v3/files/' + meta.id + '?alt=media');
+  if (!r.ok) throw new Error('Could not read ledger from Drive');
+  return fromCSV(await r.text());
+}
+
+async function applyDriveCsv(meta) {
+  await applyLedger(await loadCsvFromMeta(meta), meta);
 }
 
 async function pushCsvToDrive(quiet) {
@@ -170,49 +194,108 @@ async function pushCsvToDrive(quiet) {
   if (!quiet) toast('Synced to Drive');
 }
 
-/** Drive CSV is the shared ledger. Pull if Drive is newer or this browser never synced. */
+function finishSync(hint, result) {
+  session.syncHint = hint;
+  session.syncStatus = 'idle';
+  hub.updateSyncPill();
+  return result;
+}
+
+/** Drive CSV is the shared ledger. IndexedDB is only a cache. */
 export async function reconcileLedgerWithDrive(opts) {
   opts = opts || {};
-  if (!settings.driveToken) return 'offline';
+  if (!settings.driveToken) {
+    session.syncHint = 'local';
+    hub.updateSyncPill();
+    return 'offline';
+  }
   session.syncStatus = 'syncing';
   hub.updateSyncPill();
   try {
     await ensureDriveFolder();
-    const meta = await findDriveFileMeta(CSV_FILE);
-    const empty = ledgerEmpty();
-    if (opts.forcePull && meta) {
-      await applyDriveCsv(meta);
-      session.syncStatus = 'idle';
-      hub.updateSyncPill();
-      toast('Loaded ledger from Google Drive');
-      return 'pulled';
+    const folders = await listSiteLedgerFolders();
+    const copies = [];
+    for (const f of folders) {
+      const meta = await csvMetaInFolder(f.id);
+      if (!meta) continue;
+      copies.push({folderId: f.id, meta, ledger: await loadCsvFromMeta(meta)});
     }
-    if (!meta) {
-      if (!empty) await pushCsvToDrive(true);
-      session.syncStatus = 'idle';
-      hub.updateSyncPill();
-      return empty ? 'empty' : 'pushed';
+    copies.sort((a, b) => (Date.parse(b.meta.modifiedTime) || 0) - (Date.parse(a.meta.modifiedTime) || 0));
+    let driveLedger = null;
+    let newestMeta = copies[0] ? copies[0].meta : null;
+    for (const c of copies) {
+      driveLedger = driveLedger ? mergeLedgers(driveLedger, c.ledger) : c.ledger;
     }
-    const driveMs = Date.parse(meta.modifiedTime) || 0;
+    const extraFolders = copies.filter(c => c.folderId !== settings.driveFolderId);
+    const localSnap = snapshotLedger();
+    const empty = ledgerEmpty(localSnap);
+    const driveEmpty = !driveLedger || ledgerEmpty(driveLedger);
+
+    if (opts.forcePull && newestMeta && !driveEmpty) {
+      await applyLedger(driveLedger, newestMeta);
+      if (extraFolders.length) {
+        await pushCsvToDrive(true);
+        for (const extra of extraFolders) {
+          try { await deleteDriveFile(extra.meta.id); } catch (e) {}
+        }
+      }
+      if (!opts.quiet) toast('Loaded from Drive');
+      return finishSync('drive', 'pulled');
+    }
+    if (driveEmpty) {
+      if (!empty) {
+        await pushCsvToDrive(true);
+        if (!opts.quiet) toast('Saved to Google Drive');
+        return finishSync('drive', 'pushed');
+      }
+      return finishSync('drive', 'empty');
+    }
+    if (empty) {
+      await applyLedger(driveLedger, newestMeta);
+      if (extraFolders.length) {
+        await pushCsvToDrive(true);
+        for (const extra of extraFolders) {
+          try { await deleteDriveFile(extra.meta.id); } catch (e) {}
+        }
+      }
+      if (!opts.quiet) toast('Loaded from Drive');
+      return finishSync('drive', 'pulled');
+    }
+
+    const driveMs = Date.parse(newestMeta.modifiedTime) || 0;
     const lastMs = Date.parse(settings.csvSyncedAt) || 0;
-    if (empty || !lastMs || driveMs > lastMs + 2000) {
-      await applyDriveCsv(meta);
-      session.syncStatus = 'idle';
-      hub.updateSyncPill();
-      if (!opts.quiet) toast('Loaded ledger from Google Drive');
-      return 'pulled';
+    const dirty = !!settings.csvDirty;
+    const driveNewer = driveMs > lastMs + 2000;
+
+    if (!dirty && lastMs && !driveNewer && !extraFolders.length) {
+      return finishSync('drive', 'ok');
     }
-    if (settings.csvDirty) {
+    if (dirty && !driveNewer && lastMs && !extraFolders.length) {
       await pushCsvToDrive(true);
-      session.syncStatus = 'idle';
-      hub.updateSyncPill();
-      return 'pushed';
+      if (!opts.quiet) toast('Saved to Google Drive');
+      return finishSync('drive', 'pushed');
     }
-    session.syncStatus = 'idle';
-    hub.updateSyncPill();
-    return 'ok';
+    if (!dirty && lastMs && driveNewer && !extraFolders.length) {
+      await applyLedger(driveLedger, newestMeta);
+      if (!opts.quiet) toast('Loaded from Drive');
+      return finishSync('drive', 'pulled');
+    }
+
+    const preferDrive = driveNewer || ledgerRecordCount(driveLedger) >= ledgerRecordCount(localSnap);
+    const merged = mergeLedgers(preferDrive ? driveLedger : localSnap, preferDrive ? localSnap : driveLedger);
+    await applyLedger(merged, newestMeta);
+    await pushCsvToDrive(true);
+    for (const extra of extraFolders) {
+      try { await deleteDriveFile(extra.meta.id); } catch (e) {}
+    }
+    if (!opts.quiet) {
+      if (extraFolders.length) toast('Merged Drive copies into one ledger');
+      else toast('Merged with Drive — phone and PC now share one ledger');
+    }
+    return finishSync('merged', 'merged');
   } catch (e) {
     session.syncStatus = 'error';
+    session.syncHint = 'local';
     hub.updateSyncPill();
     throw e;
   }
@@ -321,12 +404,19 @@ export function updateSyncPill() {
   const on = !!settings.driveToken && session.syncStatus !== 'error';
   $('sync-dot').classList.toggle('on', on && session.syncStatus !== 'syncing');
   $('sync-dot').classList.toggle('spin', session.syncStatus === 'syncing');
-  let text = 'Sign in required — tap to continue with Google';
+  const email = settings.user && settings.user.email ? settings.user.email : '';
+  let text = 'Saved to this device only — tap to continue with Google';
   if (session.syncStatus === 'syncing') text = 'Syncing with Google Drive…';
   else if (session.syncStatus === 'error') text = 'Drive sync failed — tap to retry';
-  else if (settings.driveToken) text = settings.user && settings.user.email ? 'Drive · ' + settings.user.email : 'Synced to Google Drive';
+  else if (!settings.driveToken) text = 'Saved to this device only — tap to continue with Google';
+  else if (session.syncHint === 'merged') text = email ? 'Merged with Drive · ' + email : 'Merged with Drive';
+  else if (session.syncHint === 'local') text = 'Saved to this device only';
+  else text = email ? 'Loaded from Drive · ' + email : 'Loaded from Drive';
   $('sync-text').textContent = text;
-  if (pill) pill.classList.toggle('tappable', !settings.driveToken || session.syncStatus === 'error');
+  if (pill) {
+    pill.classList.toggle('tappable', !settings.driveToken || session.syncStatus === 'error');
+    pill.classList.toggle('warn', !settings.driveToken || session.syncStatus === 'error' || session.syncHint === 'local');
+  }
 }
 
 hub.updateSyncPill = updateSyncPill;

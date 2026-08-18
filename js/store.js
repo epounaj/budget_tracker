@@ -1,4 +1,4 @@
-import {DB_NAME, STORES, TOKEN_KEY} from './config.js?v=20260818p';
+import {DB_NAME, STORES, TOKEN_KEY} from './config.js?v=20260818q';
 
 let db;
 export let state = {funds: [], budget: [], actions: [], sellers: [], purchases: []};
@@ -15,8 +15,10 @@ export let session = {
   pending: null,
   lastClientId: '',
   loggedIn: false,
-  syncStatus: 'idle'
+  syncStatus: 'idle',
+  syncHint: 'local'
 };
+export const LEDGER_STORES = ['funds', 'budget', 'actions', 'sellers', 'purchases'];
 
 export function replaceLedger(next) {
   state.funds = next.funds || [];
@@ -28,6 +30,55 @@ export function replaceLedger(next) {
 
 export function emptyLedger() {
   replaceLedger({funds: [], budget: [], actions: [], sellers: [], purchases: []});
+}
+
+export function snapshotLedger() {
+  const out = {};
+  for (const s of LEDGER_STORES) out[s] = (state[s] || []).map(r => Object.assign({}, r));
+  return out;
+}
+
+function rowHasData(r) {
+  if (!r) return false;
+  if (r.id) return true;
+  return Object.keys(r).some(k => {
+    if (k === 'id' || k === 'updatedAt') return false;
+    const v = r[k];
+    if (v == null || v === '') return false;
+    if (Array.isArray(v)) return v.length > 0;
+    return true;
+  });
+}
+
+export function ledgerRecordCount(ledger) {
+  const src = ledger || state;
+  return LEDGER_STORES.reduce((n, s) => n + (src[s] || []).filter(rowHasData).length, 0);
+}
+
+/** Union by record id. Conflicts: newer updatedAt wins, else the preferred ledger. */
+export function mergeLedgers(preferred, other) {
+  const out = {};
+  for (const s of LEDGER_STORES) {
+    const map = new Map();
+    for (const row of (other && other[s]) || []) {
+      if (row && row.id) map.set(String(row.id), Object.assign({}, row));
+    }
+    for (const row of (preferred && preferred[s]) || []) {
+      if (!row || !row.id) continue;
+      const id = String(row.id);
+      const prev = map.get(id);
+      if (!prev) {
+        map.set(id, Object.assign({}, row));
+        continue;
+      }
+      const pT = Date.parse(row.updatedAt) || 0;
+      const oT = Date.parse(prev.updatedAt) || 0;
+      if (oT && pT && oT > pT) continue;
+      map.set(id, Object.assign({}, row));
+    }
+    out[s] = Array.from(map.values());
+  }
+  return out;
 }
 
 function openDB() {
@@ -72,8 +123,8 @@ export async function loadAll() {
   if (st) settings = Object.assign(settings, st);
 }
 
-export function ledgerEmpty() {
-  return ['funds', 'budget', 'actions', 'sellers', 'purchases'].every(s => !state[s].length);
+export function ledgerEmpty(ledger) {
+  return ledgerRecordCount(ledger) === 0;
 }
 
 export async function persist(store, opts) {

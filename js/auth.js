@@ -1,8 +1,8 @@
-import {LOGIN_SCOPE, G_ICON} from './config.js?v=20260818p';
-import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger, persistOauth, clearSavedToken, tokenIsFresh} from './store.js?v=20260818p';
-import {$, esc, toast} from './util.js?v=20260818p';
-import {hub} from './hub.js?v=20260818p';
-import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, reconcileLedgerWithDrive} from './drive.js?v=20260818p';
+import {LOGIN_SCOPE, G_ICON} from './config.js?v=20260818q';
+import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger, persistOauth, clearSavedToken, tokenIsFresh} from './store.js?v=20260818q';
+import {$, esc, toast} from './util.js?v=20260818q';
+import {hub} from './hub.js?v=20260818q';
+import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, reconcileLedgerWithDrive} from './drive.js?v=20260818q';
 
 export function secureContext() { return window.isSecureContext === true && location.protocol !== 'file:'; }
 export function loadGis() {
@@ -42,12 +42,12 @@ export function renderLogin(opts) {
   $('login-card').innerHTML =
     '<div class="login-brand"><div class="logo"><svg viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-6h6v6"/></svg></div><h1>Site Ledger</h1></div>' +
     '<h2>Sign in to continue</h2>' +
-    '<p class="lead">' + (who ? 'Welcome back, ' + esc(who) + '. ' : '') + 'Sign in with Google. Your ledger and API keys stay in <b>your</b> Drive, not on this website.</p>' +
+    '<p class="lead">' + (who ? 'Welcome back, ' + esc(who) + '. ' : '') + 'Sign in with Google to load the <b>same</b> ledger on phone and PC from Drive.</p>' +
     (insecure ? '<div class="set-note">This file was opened as <b>file://</b>. Open <b>http://127.0.0.1:8765</b> instead.</div>' :
       ((cid ? '' : '<div class="field" style="margin-bottom:12px"><label>App OAuth Client ID (one-time setup)</label><input id="login-client-id" value="" placeholder="….apps.googleusercontent.com" autocomplete="off"></div>' +
         '<div class="set-note" style="margin-bottom:12px">Authorised origin must be <b>' + esc(origin) + '</b>. After this is saved, other people only click Google — they never paste this ID.</div>') +
        '<button class="google-btn" id="google-login"' + (opts.busy ? ' disabled' : '') + '>' + G_ICON + (opts.busy ? 'Signing in…' : 'Continue with Google') + '</button>' +
-       '<div class="set-note">Keep this tab open. Allow popups so Google opens in a small window.</div>')) +
+       '<div class="set-note">Keep this tab open. On iPhone, allow popups for this site — Google sign-in uses a small window. Private browsing can block Drive sync.</div>')) +
     '<p class="error-text" id="login-error"></p>';
   const btn = $('google-login');
   if (btn) btn.onclick = () => startGoogleLogin(false);
@@ -57,11 +57,17 @@ function loginScreenOpen() {
   return !!(el && el.classList.contains('show'));
 }
 function failAuth(err, silent) {
-  if (loginScreenOpen() && !session.loggedIn) {
-    renderLogin();
-    if (!silent) loginErr((err && (err.message || err.type || err.error_description)) || 'Sign-in cancelled.');
-    return;
-  }
+  const raw = (err && (err.message || err.type || err.error || err.error_description)) || '';
+  const blocked = /popup|closed|blocked/i.test(String(raw));
+  const msg = blocked
+    ? 'Google sign-in window was blocked. Allow popups, then tap Continue with Google again.'
+    : (raw || 'Sign-in cancelled.');
+  session.loggedIn = false;
+  session.syncHint = 'local';
+  if (!loginScreenOpen()) showLogin();
+  else renderLogin();
+  if (!silent || blocked) loginErr(msg);
+  else loginErr('Tap Continue with Google to load your shared ledger from Drive.');
   hub.updateSyncPill();
 }
 export function startGoogleLogin(silent) {
@@ -87,13 +93,11 @@ export function startGoogleLogin(silent) {
     },
     error_callback: err => failAuth(err, silent)
   });
-  gTokenClient.requestAccessToken({prompt: silent ? 'none' : (session.loggedIn ? '' : 'select_account')});
+  gTokenClient.requestAccessToken({prompt: silent ? 'none' : 'select_account'});
 }
 export async function resumeSession() {
   if (!settings.user || !appClientId()) return false;
-  hideLogin();
   hub.updateUserChip();
-  hub.render();
   if (tokenIsFresh()) {
     try {
       await completeLogin(settings.driveToken, true, Math.max(60, Math.floor((settings.driveTokenExp - Date.now()) / 1000)));
@@ -102,8 +106,10 @@ export async function resumeSession() {
       clearSavedToken();
     }
   }
+  session.loggedIn = false;
+  showLogin();
   startGoogleLogin(true);
-  return true;
+  return false;
 }
 async function completeLogin(token, quiet, expiresIn) {
   persistOauth(token, expiresIn, settings.userSub);
@@ -127,19 +133,29 @@ async function completeLogin(token, quiet, expiresIn) {
   persistOauth(token, expiresIn, u.sub);
   await saveSettings();
   hideLogin();
+  session.syncStatus = 'syncing';
+  session.syncHint = 'drive';
   hub.updateUserChip();
+  hub.updateSyncPill();
   hub.render();
   try {
     const existed = !!settings.driveFolderId;
     await ensureDriveFolder();
+    const canonicalFolder = settings.driveFolderId;
     await loadProfileFromDrive();
+    if (canonicalFolder) settings.driveFolderId = canonicalFolder;
     await saveProfileToDrive();
-    await reconcileLedgerWithDrive({quiet: true});
+    await reconcileLedgerWithDrive({quiet: !!quiet});
     await saveSettings();
     hub.updateUserChip();
     hub.render();
     if (!quiet && !existed) toast('Drive folder: My Drive → Site Ledger');
-  } catch (e) { toast(e.message || 'Signed in, but Drive sync is not ready yet'); }
+  } catch (e) {
+    session.syncStatus = 'error';
+    session.syncHint = 'local';
+    hub.updateSyncPill();
+    toast(e.message || 'Signed in, but Drive sync is not ready yet');
+  }
 }
 export async function googleLogout() {
   const tok = settings.driveToken;
@@ -147,6 +163,8 @@ export async function googleLogout() {
   stashAi(settings.userSub);
   settings.apiKey = ''; settings.model = ''; settings.apiBase = ''; settings.models = [];
   settings.user = null; settings.userSub = '';
+  session.syncHint = 'local';
+  session.syncStatus = 'idle';
   clearSavedToken();
   await saveSettings();
   hub.updateUserChip();

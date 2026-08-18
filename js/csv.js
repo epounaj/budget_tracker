@@ -1,7 +1,7 @@
-import {uid} from './util.js?v=20260818p';
-import {state, persist, replaceLedger} from './store.js?v=20260818p';
-import {hub} from './hub.js?v=20260818p';
-import {toast, todayStr} from './util.js?v=20260818p';
+import {uid} from './util.js?v=20260818q';
+import {state, persist, replaceLedger} from './store.js?v=20260818q';
+import {hub} from './hub.js?v=20260818q';
+import {toast, todayStr} from './util.js?v=20260818q';
 
 function csvCell(v) {
   if (v == null) return '';
@@ -35,20 +35,20 @@ export function toCSV() {
     rows.forEach(r => lines.push(cols.map(c => csvCell(r[c])).join(',')));
     lines.push('');
   };
-  push('funds', state.funds, ['id', 'type', 'label', 'amount', 'date', 'notes']);
-  push('budget', state.budget, ['id', 'category', 'budgeted', 'notes']);
-  push('actions', state.actions, ['id', 'title', 'due', 'status', 'notes']);
+  push('funds', state.funds, ['id', 'type', 'label', 'amount', 'date', 'notes', 'updatedAt']);
+  push('budget', state.budget, ['id', 'category', 'budgeted', 'notes', 'updatedAt']);
+  push('actions', state.actions, ['id', 'title', 'due', 'status', 'notes', 'updatedAt']);
   push('sellers', state.sellers.map(s => Object.assign({}, s, {
     photos: Array.isArray(s.photos) ? JSON.stringify(s.photos) : (s.photos || ''),
     photoLinks: Array.isArray(s.photoLinks) ? JSON.stringify(s.photoLinks) : (s.photoLinks || ''),
     quoteLines: Array.isArray(s.quoteLines) ? JSON.stringify(s.quoteLines) : (s.quoteLines || '')
-  })), ['id', 'name', 'contact', 'item', 'price', 'status', 'notes', 'photos', 'photoLinks', 'quoteLines']);
+  })), ['id', 'name', 'contact', 'item', 'price', 'status', 'notes', 'photos', 'photoLinks', 'quoteLines', 'updatedAt']);
   push('purchases', state.purchases.map(p => Object.assign({}, p, {
     lines: Array.isArray(p.lines) ? JSON.stringify(p.lines) : (p.lines || ''),
     categories: Array.isArray(p.categories) ? JSON.stringify(p.categories) : (p.categories || ''),
     driveFileIds: Array.isArray(p.driveFileIds) ? JSON.stringify(p.driveFileIds) : (p.driveFileIds || ''),
     driveFiles: Array.isArray(p.driveFiles) ? JSON.stringify(p.driveFiles) : (p.driveFiles || '')
-  })), ['id', 'item', 'category', 'categories', 'seller', 'price', 'date', 'receipt', 'notes', 'lines', 'driveLink', 'driveFileId', 'driveFolder', 'driveFileIds', 'driveFiles']);
+  })), ['id', 'item', 'category', 'categories', 'seller', 'price', 'date', 'receipt', 'notes', 'lines', 'driveLink', 'driveFileId', 'driveFolder', 'driveFileIds', 'driveFiles', 'updatedAt']);
   return lines.join('\n');
 }
 
