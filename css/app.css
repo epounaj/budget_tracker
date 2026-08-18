@@ -73,6 +73,16 @@ h1{font-size:19px;font-weight:600;margin:0;letter-spacing:-.02em;}
 .entry-meta a{color:var(--accent);text-decoration:none;font-weight:500;}
 .meta-item strong{color:var(--ink);font-weight:600;}
 .entry-actions{display:flex;gap:6px;margin-top:13px;flex-wrap:wrap;}
+.action-row{display:flex;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px;align-items:flex-start;}
+.action-main{flex:1;min-width:0;}
+.action-check{display:inline-flex;align-items:center;justify-content:center;margin-top:4px;}
+.action-check input{width:18px;height:18px;cursor:pointer;}
+.entry-name.done{text-decoration:line-through;color:var(--ink-2);}
+.due-pill{display:inline-block;font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;}
+.due-pill.soon{color:#2D5A8A;background:#E5EEF7;}
+.due-pill.today{color:var(--loan);background:var(--loan-soft);}
+.due-pill.late{color:var(--spend);background:var(--spend-soft);}
+.due-pill.none{color:var(--ink-2);background:var(--surface-2);}
 .icon-btn{font-family:inherit;font-size:12.5px;font-weight:500;background:transparent;border:1px solid var(--line-2);cursor:pointer;color:var(--ink-2);padding:6px 12px;border-radius:8px;transition:.12s;}
 .icon-btn:hover{background:var(--surface-2);color:var(--ink);}
 .icon-btn.danger:hover{background:var(--spend-soft);color:var(--spend);border-color:var(--spend);}

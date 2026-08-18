@@ -1,12 +1,18 @@
-import {TITLES, CHIP} from './config.js?v=20260818f';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818f';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818f';
-import {hub} from './hub.js?v=20260818f';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818f';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818f';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818f';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818f';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818f';
+import {TITLES, CHIP} from './config.js?v=20260818g';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818g';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818g';
+import {hub} from './hub.js?v=20260818g';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818g';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818g';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818g';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818g';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818g';
+
+function chip(status) {
+  const map = CHIP || {};
+  const meta = map[status] || [String(status || 'pending'), String(status || 'Pending')];
+  return '<span class="chip ' + esc(meta[0]) + '">' + esc(meta[1]) + '</span>';
+}
 
 function parsePurchaseLines(p) {
   if (!p) return [{item: '', qty: '', rate: '', amount: ''}];
@@ -172,16 +178,57 @@ function renderActions() {
     if (a.status !== 'done' && b.status === 'done') return -1;
     return (a.due || '').localeCompare(b.due || '');
   });
-  const items = sorted.map(a => '<div class="entry"><div class="entry-top"><div><p class="entry-name">' + esc(a.title) + '</p>' +
+  const dayLabel = d => {
+    if (!d) return '<span class="due-pill none">No due date</span>';
+    const due = new Date(d + 'T00:00:00');
+    if (!Number.isFinite(due.getTime())) return '<span class="due-pill none">No due date</span>';
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
+    if (diff > 0) return '<span class="due-pill soon">D-' + diff + ' · ' + esc(d) + '</span>';
+    if (diff === 0) return '<span class="due-pill today">Due today · ' + esc(d) + '</span>';
+    return '<span class="due-pill late">Exceeded by ' + Math.abs(diff) + 'd · ' + esc(d) + '</span>';
+  };
+  const items = sorted.map(a => '<div class="action-row">' +
+    '<label class="action-check"><input type="checkbox" data-done="' + a.id + '"' + (a.status === 'done' ? ' checked' : '') + '><span></span></label>' +
+    '<div class="action-main"><div class="entry-top"><div><p class="entry-name' + (a.status === 'done' ? ' done' : '') + '">' + esc(a.title) + '</p>' +
     (a.notes ? '<p class="entry-sub">' + esc(a.notes) + '</p>' : '') + '</div>' + chip(a.status) + '</div>' +
-    (a.due ? '<div class="entry-meta"><span class="meta-item">Due <strong>' + esc(a.due) + '</strong></span></div>' : '') +
-    '<div class="entry-actions">' + (a.status !== 'done' ? '<button class="icon-btn good" data-done="' + a.id + '">Mark done</button>' : '') +
-    '<button class="icon-btn" data-edit="actions" data-id="' + a.id + '">Edit</button>' +
-    '<button class="icon-btn danger" data-del="actions" data-id="' + a.id + '">Delete</button></div></div>').join('');
-  return head('Pending actions', 'What still needs doing, and when.', 'actions') +
+    '<div class="entry-meta"><span class="meta-item">' + dayLabel(a.due) + '</span></div>' +
+    '<div class="entry-actions"><button class="icon-btn" data-edit="actions" data-id="' + a.id + '">Edit</button>' +
+    '<button class="icon-btn danger" data-del="actions" data-id="' + a.id + '">Delete</button></div></div></div>').join('');
+  return head('Action checklist', 'Checklist sorted by due date with D-day and overdue indicators.', 'actions') +
     (state.actions.length ? '<div class="entry-list">' + items + '</div>' : empty('No actions yet', 'Add things like "Get quote for tiles".'));
 }
 function renderSellers() {
+  const fromLines = [];
+  state.purchases.forEach(p => {
+    const seller = (p.seller || '').trim();
+    const cat = (p.category || '').trim();
+    if (!Array.isArray(p.lines)) return;
+    p.lines.forEach(l => {
+      const item = String((l && l.item) || '').trim();
+      if (!item) return;
+      const amount = Number(l.amount) || 0;
+      const qty = Number(l.qty) || 0;
+      const unit = qty > 0 ? amount / qty : (Number(l.rate) || 0);
+      fromLines.push({item, seller, category: cat || 'Uncategorized', amount, unit, date: p.date || ''});
+    });
+  });
+  const byItem = {};
+  fromLines.forEach(r => {
+    const key = r.item.toLowerCase();
+    if (!byItem[key]) byItem[key] = {item: r.item, category: r.category, rows: []};
+    byItem[key].rows.push(r);
+  });
+  const intelligence = Object.values(byItem).map(x => {
+    const priced = x.rows.filter(r => r.unit > 0);
+    if (!priced.length) return null;
+    priced.sort((a, b) => a.unit - b.unit);
+    const best = priced[0], worst = priced[priced.length - 1];
+    const avg = priced.reduce((s, r) => s + r.unit, 0) / priced.length;
+    return {item: x.item, category: x.category, best, worst, avg, samples: priced.length};
+  }).filter(Boolean).sort((a, b) => (a.best.unit - b.best.unit)).slice(0, 80);
+
   const items = state.sellers.map(s => '<div class="entry"><div class="entry-top"><div><p class="entry-name">' + esc(s.name) + '</p>' +
     (s.contact ? '<p class="entry-sub">' + esc(s.contact) + '</p>' : '') + '</div>' + chip(s.status) + '</div>' +
     '<div class="entry-meta">' + (s.item ? '<span class="meta-item">' + esc(s.item) + '</span>' : '') +
@@ -189,7 +236,14 @@ function renderSellers() {
     (s.notes ? '<span class="meta-item">' + esc(s.notes) + '</span>' : '') + '</div>' +
     '<div class="entry-actions"><button class="icon-btn" data-edit="sellers" data-id="' + s.id + '">Edit</button>' +
     '<button class="icon-btn danger" data-del="sellers" data-id="' + s.id + '">Delete</button></div></div>').join('');
-  return head('Seller shortlist', 'Compare suppliers and contractors you\'re considering.', 'sellers') +
+  const bestTable = intelligence.length
+    ? ('<div class="dash-section"><p class="dash-title">Best Price Intelligence (from your receipts/screenshots)</p>' +
+      '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Item</th><th>Category</th><th>Best seller</th><th>Best unit</th><th>Avg unit</th><th>Worst unit</th><th>Samples</th></tr></thead><tbody>' +
+      intelligence.map(r => '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.category) + '</td><td>' + esc(r.best.seller || 'Unknown') + '</td><td>' + money(r.best.unit) + '</td><td>' + money(r.avg) + '</td><td>' + money(r.worst.unit) + '</td><td>' + r.samples + '</td></tr>').join('') +
+      '</tbody></table></div></div>')
+    : '<div class="set-note">No comparable line-item prices yet. Add more screenshots/receipts with qty and amount to unlock best-price ranking.</div>';
+  return head('Seller shortlist', 'Compare suppliers and contractor quotes. Auto-rank best item prices from your purchase screenshots.', 'sellers') +
+    bestTable +
     (state.sellers.length ? '<div class="entry-list">' + items + '</div>' : empty('No sellers shortlisted yet', 'Add suppliers with their quoted price and status.'));
 }
 let purchaseSort = {col: 'date', asc: false};
@@ -307,7 +361,13 @@ function attach() {
   });
   root.querySelectorAll('[data-done]').forEach(b => b.onclick = async () => {
     const it = state.actions.find(a => a.id === b.dataset.done);
-    if (it) { it.status = 'done'; await persist('actions'); render(); if (settings.driveToken) scheduleCsvSync(); }
+    if (it) {
+      if (b.type === 'checkbox') it.status = b.checked ? 'done' : 'pending';
+      else it.status = 'done';
+      await persist('actions');
+      render();
+      if (settings.driveToken) scheduleCsvSync();
+    }
   });
   root.querySelectorAll('[data-lightbox]').forEach(im => im.onclick = e => {
     e.stopPropagation();
@@ -481,6 +541,15 @@ function bindModal() {
   const ocr = $('m-ocr'); if (ocr) ocr.onclick = startReceiptScan;
   const imgs = $('m-photo-list');
   if (imgs) imgs.querySelectorAll('img').forEach((img, i) => { img.onclick = () => openPhotoLightbox(i); });
+  $('modal').addEventListener('paste', async e => {
+    if (session.editKind !== 'purchases') return;
+    const items = [...((e.clipboardData && e.clipboardData.items) || [])];
+    const files = items.filter(it => it.type && it.type.startsWith('image/')).map(it => it.getAsFile()).filter(Boolean);
+    if (!files.length) return;
+    e.preventDefault();
+    for (const f of files) await handlePhoto(f, true);
+    await maybeScanAfterPhoto();
+  });
   wireModelPicker('m-ai', 'm-ai-custom');
   bindLineTable();
 }

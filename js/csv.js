@@ -1,7 +1,7 @@
-import {uid} from './util.js?v=20260818f';
-import {state, persist, replaceLedger} from './store.js?v=20260818f';
-import {hub} from './hub.js?v=20260818f';
-import {toast, todayStr} from './util.js?v=20260818f';
+import {uid} from './util.js?v=20260818g';
+import {state, persist, replaceLedger} from './store.js?v=20260818g';
+import {hub} from './hub.js?v=20260818g';
+import {toast, todayStr} from './util.js?v=20260818g';
 
 function csvCell(v) {
   if (v == null) return '';
@@ -40,8 +40,10 @@ export function toCSV() {
   push('actions', state.actions, ['id', 'title', 'due', 'status', 'notes']);
   push('sellers', state.sellers, ['id', 'name', 'contact', 'item', 'price', 'status', 'notes']);
   push('purchases', state.purchases.map(p => Object.assign({}, p, {
-    lines: Array.isArray(p.lines) ? JSON.stringify(p.lines) : (p.lines || '')
-  })), ['id', 'item', 'category', 'seller', 'price', 'date', 'receipt', 'notes', 'lines', 'driveLink', 'driveFileId', 'driveFolder']);
+    lines: Array.isArray(p.lines) ? JSON.stringify(p.lines) : (p.lines || ''),
+    driveFileIds: Array.isArray(p.driveFileIds) ? JSON.stringify(p.driveFileIds) : (p.driveFileIds || ''),
+    driveFiles: Array.isArray(p.driveFiles) ? JSON.stringify(p.driveFiles) : (p.driveFiles || '')
+  })), ['id', 'item', 'category', 'seller', 'price', 'date', 'receipt', 'notes', 'lines', 'driveLink', 'driveFileId', 'driveFolder', 'driveFileIds', 'driveFiles']);
   return lines.join('\n');
 }
 
@@ -59,6 +61,12 @@ export function fromCSV(text) {
     ['amount', 'budgeted', 'price'].forEach(n => { if (o[n] !== undefined && o[n] !== '') o[n] = +o[n]; });
     if (o.lines && typeof o.lines === 'string' && o.lines.trim().startsWith('[')) {
       try { o.lines = JSON.parse(o.lines); } catch (e) {}
+    }
+    if (o.driveFileIds && typeof o.driveFileIds === 'string' && o.driveFileIds.trim().startsWith('[')) {
+      try { o.driveFileIds = JSON.parse(o.driveFileIds); } catch (e) {}
+    }
+    if (o.driveFiles && typeof o.driveFiles === 'string' && o.driveFiles.trim().startsWith('[')) {
+      try { o.driveFiles = JSON.parse(o.driveFiles); } catch (e) {}
     }
     if (!o.id) o.id = uid();
     fresh[section].push(o);
