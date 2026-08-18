@@ -30,6 +30,18 @@ On another phone: sign in with the **same Google account**. Keys and CSV load fr
 6. Copy the Client ID (`….apps.googleusercontent.com`).
 7. First visit: paste it on the login screen. Optional: put it in `index.html` as `const GOOGLE_CLIENT_ID='…';` so other devices skip that step.
 
+## Enable Google Drive API (required for the folder)
+
+Create Drive folder fails until this API is on in the **same** Cloud project as the OAuth client.
+
+1. Open [Enable Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com?project=379149446558) while signed into the Google account that owns the Cloud project.
+2. Confirm the project is the one for Client ID `379149446558-…` (project number `379149446558`).
+3. Click **Enable**. If it already says **Manage**, it is on.
+4. Wait about a minute.
+5. In Site Ledger → Settings → **Create Drive folder**.
+
+Then look in that same Google account: [drive.google.com](https://drive.google.com) → **My Drive → Site Ledger**.
+
 The Client ID is public (not a secret). Do **not** put an API key in the HTML.
 
 ### GitHub Pages
@@ -45,7 +57,7 @@ Add `https://epounaj.github.io` as an authorised origin.
 
 | Item | Where |
 | --- | --- |
-| AI API key, provider, model, custom API URL | Your Drive: `Site Ledger/site-ledger-settings.json` |
+| AI API key, provider, chosen model, model list, custom API URL | Your Drive: `Site Ledger/site-ledger-settings.json` (per Google account) |
 | Ledger CSV | Your Drive: `Site Ledger/site-ledger.csv` |
 | Full receipt photos | Your Drive: `Site Ledger/` |
 | Working copy on this phone | Browser IndexedDB for this site |

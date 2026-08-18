@@ -144,6 +144,7 @@ a.set-btn:hover{background:var(--line);}
 .google-btn:focus-visible,.add-btn:focus-visible,.btn-primary:focus-visible,.settings-btn:focus-visible,.tab-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 .set-btn.accent{background:var(--accent);color:#fff;border-color:var(--accent);}
 .set-note{font-size:11.5px;color:var(--ink-3);background:var(--surface-2);border-radius:8px;padding:10px 12px;margin-top:8px;line-height:1.5;}
+.set-note a{color:var(--accent);font-weight:550;}
 .lightbox{display:none;min-height:100vh;background:rgba(20,20,20,.9);align-items:center;justify-content:center;padding:24px;position:fixed;inset:0;z-index:60;}
 .lightbox.show{display:flex;}
 .lightbox img{max-width:100%;max-height:82vh;border-radius:12px;}
@@ -242,7 +243,7 @@ function idbGetMeta(k){return new Promise((res)=>{const r=tx('meta','readonly').
 function idbSetMeta(k,v){return idbPut('meta',{k,v});}
 
 let state={funds:[],budget:[],actions:[],sellers:[],purchases:[]};
-let settings={provider:'openai',apiKey:'',model:'',apiBase:'',driveClientId:'',driveToken:null,driveFolderId:'',user:null,userSub:'',autoCsv:true};
+let settings={provider:'openai',apiKey:'',model:'',apiBase:'',models:[],profiles:{},driveClientId:'',driveToken:null,driveFolderId:'',user:null,userSub:'',autoCsv:true};
 let activeTab='funds',editing=null,editKind=null,pendingPhoto=null,pendingFullPhoto=null,photoCleared=false;
 function finiteNum(s){const n=+s;return s!==''&&Number.isFinite(n);}
 
@@ -255,9 +256,37 @@ async function persist(store){
     t.oncomplete=()=>res();t.onerror=()=>rej(t.error);
   });
 }
+function snapshotAi(){
+  return{provider:settings.provider,apiKey:settings.apiKey||'',model:settings.model||'',apiBase:settings.apiBase||'',models:Array.isArray(settings.models)?settings.models.slice(0,400):[],driveFolderId:settings.driveFolderId||''};
+}
+function applyAi(p){
+  if(!p)return;
+  if(p.provider)settings.provider=p.provider;
+  if(p.apiKey!=null)settings.apiKey=p.apiKey;
+  if(p.model!=null)settings.model=p.model;
+  if(p.apiBase!=null)settings.apiBase=p.apiBase;
+  if(Array.isArray(p.models))settings.models=p.models.slice(0,400);
+  if(p.driveFolderId!=null)settings.driveFolderId=p.driveFolderId;
+}
+function stashAi(sub){
+  if(!sub)return;
+  if(!settings.profiles||typeof settings.profiles!=='object')settings.profiles={};
+  settings.profiles[sub]=snapshotAi();
+}
+function applyStashedAi(sub){
+  if(!sub)return;
+  const p=settings.profiles&&settings.profiles[sub];
+  if(!p){settings.apiKey='';settings.model='';settings.apiBase='';settings.models=[];settings.driveFolderId='';return;}
+  applyAi(p);
+}
 async function saveSettings(){
+  if(settings.userSub)stashAi(settings.userSub);
   const snap=Object.assign({},settings,{driveToken:null});
   await idbSetMeta('settings',snap);
+}
+async function persistAiToProfile(){
+  await saveSettings();
+  try{await saveProfileToDrive();}catch(e){}
 }
 
 /* ---- calcs ---- */
@@ -459,9 +488,10 @@ async function saveInlineAiKey(){
   if(b)settings.apiBase=b.value.trim();
   const model=readModelValue('m-ai');
   if(model||settings.provider==='custom')settings.model=model;
+  const modelSel=$('m-ai-model');if(modelSel&&Array.isArray(modelSel._allModels)&&modelSel._allModels.length)settings.models=modelSel._allModels.slice(0,400);
   if(!settings.apiKey)return false;
   if(settings.provider==='custom'&&(!settings.apiBase||!settings.model))return false;
-  await saveSettings();try{await saveProfileToDrive();}catch(e){}
+  await persistAiToProfile();
   return true;
 }
 async function startReceiptScan(){
@@ -620,7 +650,9 @@ function wireModelPicker(ns,customWrapId){
       const models=await listProviderModels(s.provider,s.apiKey,s.apiBase);
       if(seq!==loadSeq)return;
       modelsCache[ck]=models;
-      paint(models,readModelValue(ns)||settings.model,models.length?(models.length+' models from API'):'API returned no models');
+      settings.models=models;
+      paint(models,readModelValue(ns)||settings.model,models.length?(models.length+' models saved to your profile'):'API returned no models');
+      persistAiToProfile();
     }catch(e){
       if(seq!==loadSeq)return;
       const msg=/failed to fetch|networkerror|load failed/i.test(String(e.message||e))
@@ -636,10 +668,16 @@ function wireModelPicker(ns,customWrapId){
   modelEl.addEventListener('change',syncOther);
   if(filterEl)filterEl.addEventListener('input',()=>paint(modelEl._allModels||[],readModelValue(ns)));
   if(refreshEl)refreshEl.onclick=()=>load(true);
+  const saved=Array.isArray(settings.models)?settings.models:[];
   const initial=settings.model||'';
-  paint(initial?[initial]:[],initial,'Paste your API key, then tap Load to browse models from the API.');
+  if(saved.length){
+    modelsCache[cacheKey(snap())]=saved;
+    paint(saved,initial,saved.length+' models saved in your profile');
+  }else{
+    paint(initial?[initial]:[],initial,'Paste your API key, then tap Load to browse models from the API.');
+  }
   syncCustom();
-  if(snap().apiKey&&(snap().provider!=='custom'||snap().apiBase))load(false);
+  if(!saved.length&&snap().apiKey&&(snap().provider!=='custom'||snap().apiBase))load(false);
 }
 function providerConfig(){
   const p=settings.provider;
@@ -718,7 +756,7 @@ $('lightbox-close').onclick=()=>$('lightbox').classList.remove('show');
 $('lightbox').addEventListener('click',e=>{if(e.target.id==='lightbox')$('lightbox').classList.remove('show');});
 
 /* ---- toast ---- */
-let toastT;function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600);}
+let toastT;function toast(msg,ms){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),ms||(msg&&msg.length>80?7000:2600));}
 
 /* ---- CSV export / import ---- */
 function toCSV(){
@@ -817,10 +855,11 @@ async function completeLogin(token,quiet){
   if(!ur.ok)throw new Error('Could not read Google profile');
   const u=await ur.json();
   if(settings.userSub&&settings.userSub!==u.sub){
+    stashAi(settings.userSub);
     state={funds:[],budget:[],actions:[],sellers:[],purchases:[]};
     for(const s of ['funds','budget','actions','sellers','purchases'])await persist(s);
-    settings.driveFolderId='';settings.apiKey='';settings.model='';settings.apiBase='';
   }
+  applyStashedAi(u.sub);
   settings.user={email:u.email,name:u.name,picture:u.picture};settings.userSub=u.sub;settings.autoCsv=true;
   await saveSettings();
   hideLogin();updateUserChip();render();
@@ -837,7 +876,9 @@ async function completeLogin(token,quiet){
 async function googleLogout(){
   const tok=settings.driveToken;
   if(tok&&window.google&&google.accounts&&google.accounts.oauth2)try{google.accounts.oauth2.revoke(tok,()=>{});}catch(e){}
-  settings.apiKey='';settings.driveToken=null;settings.user=null;settings.userSub='';
+  stashAi(settings.userSub);
+  settings.apiKey='';settings.model='';settings.apiBase='';settings.models=[];
+  settings.driveToken=null;settings.user=null;settings.userSub='';
   await saveSettings();updateUserChip();showLogin();toast('Signed out');
 }
 function updateUserChip(){
@@ -846,13 +887,19 @@ function updateUserChip(){
   $('user-pic').src=settings.user.picture||'';$('user-name').textContent=settings.user.name||settings.user.email||'Signed in';
   chip.classList.add('show');
 }
+function driveApiEnableUrl(){
+  const cid=appClientId()||GOOGLE_CLIENT_ID||'';
+  const proj=(cid.match(/^(\d+)/)||[])[1];
+  return 'https://console.cloud.google.com/apis/library/drive.googleapis.com'+(proj?('?project='+proj):'');
+}
 async function driveFetch(url,opts){opts=opts||{};opts.headers=Object.assign({'Authorization':'Bearer '+settings.driveToken},opts.headers||{});
   const r=await fetch(url,opts);
   if(r.status===401){settings.driveToken=null;throw new Error('Drive session expired — sign in again');}
   if(!r.ok){
-    let msg='Google Drive error '+r.status;
-    try{const j=await r.json();if(j.error&&j.error.message)msg=j.error.message;}catch(e){}
-    if(r.status===403||/drive api/i.test(msg))msg='Enable the Google Drive API in your Site Ledger Google Cloud project, wait a minute, then tap Create Drive folder.';
+    let msg='Google Drive error '+r.status,reason='';
+    try{const j=await r.json();if(j.error&&j.error.message)msg=j.error.message;if(j.error&&j.error.errors&&j.error.errors[0])reason=j.error.errors[0].reason||'';}catch(e){}
+    if(r.status===403&&(/accessNotConfigured|has not been used|is disabled|Drive API/i.test(msg+' '+reason)))
+      msg='Enable the Google Drive API (click Enable Drive API in Settings), wait a minute, then tap Create Drive folder.';
     throw new Error(msg);
   }
   return r;}
@@ -896,13 +943,12 @@ async function loadProfileFromDrive(){
   const id=await findDriveFile(PROFILE_FILE);if(!id)return;
   const r=await driveFetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media');if(!r.ok)return;
   const p=await r.json();
-  if(p.provider)settings.provider=p.provider;if(p.apiKey!=null)settings.apiKey=p.apiKey;
-  if(p.model!=null)settings.model=p.model;if(p.apiBase!=null)settings.apiBase=p.apiBase;
-  if(p.autoCsv!=null)settings.autoCsv=p.autoCsv;
+  applyAi(p);
 }
 async function saveProfileToDrive(){
   if(!settings.driveToken)return;
-  const blob=new Blob([JSON.stringify({provider:settings.provider,apiKey:settings.apiKey||'',model:settings.model||'',apiBase:settings.apiBase||'',autoCsv:true})],{type:'application/json'});
+  const body=snapshotAi();
+  const blob=new Blob([JSON.stringify({provider:body.provider,apiKey:body.apiKey,model:body.model,apiBase:body.apiBase,models:body.models,autoCsv:true})],{type:'application/json'});
   await upsertDriveFile(PROFILE_FILE,blob);
 }
 async function pullCsvFromDriveIfEmpty(){
@@ -940,9 +986,10 @@ function renderSettings(){
     '<div class="set-section"><h3>Google account</h3><p class="hint">'+(who?'Signed in as <b>'+esc(who)+'</b>.':'Not signed in.')+'</p>'+
     '<div class="set-row"><button class="set-btn accent" id="drive-syncnow">Sync now</button>'+
     '<button class="set-btn" id="drive-create">Create Drive folder</button>'+
+    '<a class="set-btn" id="drive-enable-api" href="'+esc(driveApiEnableUrl())+'" target="_blank" rel="noopener">Enable Drive API</a>'+
     (settings.driveFolderId?'<a class="set-btn" id="drive-open" href="https://drive.google.com/drive/folders/'+esc(settings.driveFolderId)+'" target="_blank" rel="noopener">Open Drive folder</a>':'')+
     '<button class="set-btn" id="google-logout">Sign out</button></div>'+
-    '<div class="set-note">Look in the same Google account you signed in with: <b>drive.google.com → My Drive → Site Ledger</b> (not “side ledger”). If it is missing, enable <b>Google Drive API</b> in that Cloud project, then tap Create Drive folder.</div></div>'+
+    '<div class="set-note">Folder: <b>drive.google.com → My Drive → Site Ledger</b>. If Create Drive folder fails, tap <b>Enable Drive API</b> (same Google Cloud project as this app), click <b>Enable</b>, wait about a minute, come back, then tap Create Drive folder.</div></div>'+
     '<div class="set-section"><h3>AI receipt scanning</h3><p class="hint">Paste your own key for OpenAI, Qwen, DeepSeek, or any OpenAI-compatible API. Saved to your Drive, then loaded on any device when you sign in.</p>'+
     '<div class="field" style="margin-bottom:10px"><label>Provider</label><select id="set-provider">'+providerOptionsHtml()+'</select></div>'+
     '<div id="set-custom" style="display:none">'+
@@ -950,7 +997,7 @@ function renderSettings(){
     '<p class="field-hint">Works with Groq, OpenRouter, Ollama, LM Studio, vLLM, and similar. Use the /v1 root or the full /v1/chat/completions URL.</p></div></div>'+
     '<div class="field" style="margin-bottom:10px"><label>API key</label><input id="set-key" type="password" value="'+esc(settings.apiKey)+'" placeholder="sk-… or your provider key" autocomplete="off"></div>'+
     modelPickerHtml('set')+
-    '<div class="set-note">Add your key, tap Load to browse models, then Save settings. The key never goes into GitHub.</div></div>'+
+    '<div class="set-note">Provider, key, chosen model, and the model list are saved to <b>your</b> Google Drive profile. They load again when you sign in on any device.</div></div>'+
     '<div class="set-section"><h3>Manual backup (CSV)</h3><p class="hint">Export a local copy, or import to replace current data.</p>'+
     '<div class="set-row"><button class="set-btn" id="csv-export">Export CSV</button>'+
     '<button class="set-btn" id="csv-import">Import CSV</button>'+
@@ -962,6 +1009,7 @@ function renderSettings(){
     settings.provider=$('set-provider').value;settings.apiKey=$('set-key').value.trim();
     settings.model=readModelValue('set');
     const baseEl=$('set-base');if(baseEl)settings.apiBase=baseEl.value.trim();
+    const modelSel=$('set-model');if(modelSel&&Array.isArray(modelSel._allModels)&&modelSel._allModels.length)settings.models=modelSel._allModels.slice(0,400);
     if(settings.provider==='custom'){
       if(!settings.apiBase){toast('Enter the custom API base URL');return;}
       if(!settings.model){toast('Choose a model, or tap Other to type one');return;}
