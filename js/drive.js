@@ -1,8 +1,8 @@
-import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818o';
-import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, clearSavedToken} from './store.js?v=20260818o';
-import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage} from './util.js?v=20260818o';
-import {toCSV, fromCSV} from './csv.js?v=20260818o';
-import {hub} from './hub.js?v=20260818o';
+import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818p';
+import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, clearSavedToken} from './store.js?v=20260818p';
+import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage, driveFolderName} from './util.js?v=20260818p';
+import {toCSV, fromCSV} from './csv.js?v=20260818p';
+import {hub} from './hub.js?v=20260818p';
 
 export function appClientId() {
   const inp = $('login-client-id');
@@ -74,21 +74,37 @@ export async function ensureDriveFolder() {
 async function findDriveChild(parentId, name, folderOnly) {
   const extra = folderOnly ? " and mimeType='application/vnd.google-apps.folder'" : '';
   const q = encodeURIComponent("name='" + driveQueryName(name) + "' and '" + parentId + "' in parents and trashed=false" + extra);
-  const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)&spaces=drive');
+  const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,createdTime)&spaces=drive&orderBy=createdTime');
   const j = await r.json();
   return (j.files && j.files[0] && j.files[0].id) || null;
 }
+
+const childFolderLocks = {};
+async function listChildFolders(parentId) {
+  const q = encodeURIComponent("'" + parentId + "' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false");
+  const r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,createdTime)&spaces=drive&orderBy=createdTime&pageSize=100');
+  const j = await r.json();
+  return j.files || [];
+}
 async function ensureChildFolder(parentId, name) {
   name = folderSafe(name) || 'Other';
-  const id = await findDriveChild(parentId, name, true);
-  if (id) return id;
-  const cr = await driveFetch('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId]})
-  });
-  const cj = await cr.json();
-  if (!cj.id) throw new Error('Could not create Drive folder ' + name);
-  return cj.id;
+  if (name.toLowerCase() === 'uncategorized') name = 'Other';
+  const key = parentId + '|' + name.toLowerCase();
+  if (childFolderLocks[key]) return childFolderLocks[key];
+  childFolderLocks[key] = (async () => {
+    const kids = await listChildFolders(parentId);
+    const hit = kids.find(f => String(f.name || '').toLowerCase() === name.toLowerCase());
+    if (hit) return hit.id;
+    const cr = await driveFetch('https://www.googleapis.com/drive/v3/files', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId]})
+    });
+    const cj = await cr.json();
+    if (!cj.id) throw new Error('Could not create Drive folder ' + name);
+    return cj.id;
+  })();
+  try { return await childFolderLocks[key]; }
+  finally { setTimeout(() => { delete childFolderLocks[key]; }, 400); }
 }
 export async function findDriveFile(name) {
   await ensureDriveFolder();
@@ -230,7 +246,7 @@ export async function uploadOriginalToDrive(fileOrBlob, info) {
   info = info || {};
   await ensureDriveFolder();
   const receiptsId = await ensureChildFolder(settings.driveFolderId, 'Receipts');
-  const catName = folderSafe(normalizeCategory(info.category) || info.category) || 'Uncategorized';
+  const catName = driveFolderName(info.category);
   const catId = await ensureChildFolder(receiptsId, catName);
   const ext = info.ext || extFromFile(fileOrBlob) || 'jpg';
   const bits = [info.date || todayStr(), folderSafe(info.seller), folderSafe(info.item), folderSafe(info.receipt)].filter(Boolean);

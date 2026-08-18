@@ -1,17 +1,49 @@
-import {TITLES, CHIP} from './config.js?v=20260818o';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818o';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile, lineAmount, sumLines} from './util.js?v=20260818o';
-import {hub} from './hub.js?v=20260818o';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818o';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818o';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818o';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818o';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818o';
+import {TITLES, CHIP} from './config.js?v=20260818p';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818p';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile, lineAmount, sumLines, purchaseCategories, summarizePurchase} from './util.js?v=20260818p';
+import {hub} from './hub.js?v=20260818p';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818p';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr, categoryPillsHtml} from './receipts.js?v=20260818p';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818p';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818p';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818p';
 
 let sellerPendingPhotos = [];
 let sellerPendingLines = [];
 let sellerItemSearch = '';
 let saveBusy = false;
+
+const ICO = {
+  edit: '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4h8v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+  left: '<svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>',
+  right: '<svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>'
+};
+function actBtns(kind, id) {
+  return '<div class="row-actions">' +
+    '<button type="button" class="icon-btn icon-only" data-edit="' + kind + '" data-id="' + id + '" title="Edit" aria-label="Edit">' + ICO.edit + '</button>' +
+    '<button type="button" class="icon-btn icon-only danger" data-del="' + kind + '" data-id="' + id + '" title="Delete" aria-label="Delete">' + ICO.trash + '</button></div>';
+}
+function catChips(p) {
+  const cats = purchaseCategories(p);
+  if (!cats.length) return '<span class="muted">—</span>';
+  return cats.map(c => '<span class="chip cat">' + esc(c) + '</span>').join('');
+}
+function showLightbox(src, cap, driveLink) {
+  const img = $('lightbox-img'), box = $('lightbox'), bar = $('lightbox-bar'), open = $('lightbox-drive'), label = $('lightbox-cap');
+  if (!box) return;
+  if (img) {
+    if (src) { img.src = src; img.style.display = ''; }
+    else { img.removeAttribute('src'); img.style.display = 'none'; }
+  }
+  if (label) label.textContent = cap || '';
+  if (open) {
+    if (driveLink) { open.href = driveLink; open.style.display = ''; }
+    else { open.removeAttribute('href'); open.style.display = 'none'; }
+  }
+  if (bar) bar.hidden = !(cap || driveLink);
+  box.classList.add('show');
+}
 
 function setSaveBusy(on) {
   saveBusy = !!on;
@@ -109,7 +141,7 @@ function parsePurchaseLines(p) {
   if (!lines.length) return [{item: '', qty: '', rate: '', amount: ''}];
   return lines.map(l => {
     const computed = lineAmount(l);
-    return {item: l.item || '', qty: l.qty || '', rate: l.rate || '', amount: computed || l.amount || ''};
+    return {item: l.item || '', qty: l.qty || '', rate: l.rate || '', amount: computed || l.amount || '', category: normalizeCategory(l.category)};
   });
 }
 
@@ -120,7 +152,19 @@ function purchaseTotal(p) {
   return ls || +p.price || 0;
 }
 function totalSpent() { return state.purchases.reduce((s, p) => s + purchaseTotal(p), 0); }
-function spentForCat(c) { return state.purchases.filter(p => (p.category || '').toLowerCase() === String(c || '').toLowerCase()).reduce((s, p) => s + purchaseTotal(p), 0); }
+function spentForCat(c) {
+  const key = String(c || '').toLowerCase();
+  return state.purchases.reduce((s, p) => {
+    const lines = Array.isArray(p.lines) ? p.lines : [];
+    const tagged = lines.filter(l => normalizeCategory(l.category));
+    if (tagged.length) return s + tagged.filter(l => normalizeCategory(l.category).toLowerCase() === key).reduce((a, l) => a + lineAmount(l), 0);
+    const cats = purchaseCategories(p);
+    if (!cats.length) return s;
+    if (cats.length === 1 && cats[0].toLowerCase() === key) return s + purchaseTotal(p);
+    if (cats.some(x => x.toLowerCase() === key)) return s + purchaseTotal(p) / cats.length;
+    return s;
+  }, 0);
+}
 
 function computeSummary() {
   const loan = loanReceived(), cash = ownCash(), spent = totalSpent(), avail = loan + cash - spent;
@@ -246,12 +290,13 @@ function renderDashboard() {
   }
 
   // Category breakdown
-  const catTotals = {};
+  const catSet = new Set();
   state.purchases.forEach(p => {
-    const c = (p.category || 'Uncategorized').trim();
-    catTotals[c] = (catTotals[c] || 0) + purchaseTotal(p);
+    const cats = purchaseCategories(p);
+    if (cats.length) cats.forEach(c => catSet.add(c));
+    else catSet.add('Other');
   });
-  const catList = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+  const catList = [...catSet].map(c => [c, spentForCat(c)]).filter(row => row[1] > 0).sort((a, b) => b[1] - a[1]);
   if (catList.length) {
     html += '<div class="dash-section"><p class="dash-title">Category breakdown</p><table class="dash-table"><thead><tr><th>Category</th><th>Spent</th></tr></thead><tbody>';
     catList.forEach(([cat, amt]) => {
@@ -270,8 +315,7 @@ function renderFunds() {
     '<p class="entry-sub">' + (f.type === 'loan' ? '<span class="tag">Loan phase</span>' : '<span class="tag">Own cash</span>') + ' &nbsp;' + esc(f.date || '') + '</p></div>' +
     '<span class="entry-amount" style="color:' + (f.type === 'loan' ? 'var(--loan)' : 'var(--ink)') + '">+' + money(f.amount) + '</span></div>' +
     (f.notes ? '<div class="entry-meta"><span class="meta-item">' + esc(f.notes) + '</span></div>' : '') +
-    '<div class="entry-actions"><button class="icon-btn" data-edit="funds" data-id="' + f.id + '">Edit</button>' +
-    '<button class="icon-btn danger" data-del="funds" data-id="' + f.id + '">Delete</button></div></div>').join('');
+    '<div class="entry-actions">' + actBtns('funds', f.id) + '</div></div>').join('');
   return head('Funds', 'Log each loan tranche as it lands, plus any own cash. Spending is deducted automatically.', 'funds') +
     (state.funds.length ? '<div class="entry-list">' + items + '</div>' : empty('No funds recorded yet', 'Add your first loan phase or own-cash contribution.'));
 }
@@ -283,38 +327,43 @@ function renderBudget() {
       '<div class="entry-meta"><span class="meta-item">Spent <strong>' + money(spent) + '</strong></span>' +
       '<span class="meta-item">Remaining <strong style="color:' + (remain < 0 ? 'var(--spend)' : 'var(--accent)') + '">' + money(remain) + '</strong></span></div>' +
       '<div class="bar"><span class="' + (spent > bud ? 'over' : '') + '" style="width:' + w + '%"></span></div>' +
-      '<div class="entry-actions"><button class="icon-btn" data-edit="budget" data-id="' + b.id + '">Edit</button>' +
-      '<button class="icon-btn danger" data-del="budget" data-id="' + b.id + '">Delete</button></div></div>';
+      '<div class="entry-actions">' + actBtns('budget', b.id) + '</div></div>';
   }).join('');
   return head('Budget by category', 'Plan what each part should cost. Actual spend fills in from purchases.', 'budget') +
     (state.budget.length ? '<div class="entry-list">' + items + '</div>' : empty('No budget categories yet', 'Add a category like "Roofing" with a planned amount.'));
 }
 function renderActions() {
-  const sorted = [...state.actions].sort((a, b) => {
-    if (a.status === 'done' && b.status !== 'done') return 1;
-    if (a.status !== 'done' && b.status === 'done') return -1;
-    return (a.due || '').localeCompare(b.due || '');
-  });
+  const cols = [
+    {id: 'pending', title: 'To do'},
+    {id: 'progress', title: 'Doing'},
+    {id: 'done', title: 'Done'}
+  ];
   const dayLabel = d => {
-    if (!d) return '<span class="due-pill none">No due date</span>';
+    if (!d) return '<span class="due-pill none">No date</span>';
     const due = new Date(d + 'T00:00:00');
-    if (!Number.isFinite(due.getTime())) return '<span class="due-pill none">No due date</span>';
+    if (!Number.isFinite(due.getTime())) return '<span class="due-pill none">No date</span>';
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
-    if (diff > 0) return '<span class="due-pill soon">D-' + diff + ' · ' + esc(d) + '</span>';
-    if (diff === 0) return '<span class="due-pill today">Due today · ' + esc(d) + '</span>';
-    return '<span class="due-pill late">Exceeded by ' + Math.abs(diff) + 'd · ' + esc(d) + '</span>';
+    if (diff > 0) return '<span class="due-pill soon">D-' + diff + '</span>';
+    if (diff === 0) return '<span class="due-pill today">Today</span>';
+    return '<span class="due-pill late">' + Math.abs(diff) + 'd late</span>';
   };
-  const items = sorted.map(a => '<div class="action-row">' +
-    '<label class="action-check"><input type="checkbox" data-done="' + a.id + '"' + (a.status === 'done' ? ' checked' : '') + '><span></span></label>' +
-    '<div class="action-main"><div class="entry-top"><div><p class="entry-name' + (a.status === 'done' ? ' done' : '') + '">' + esc(a.title) + '</p>' +
-    (a.notes ? '<p class="entry-sub">' + esc(a.notes) + '</p>' : '') + '</div>' + chip(a.status) + '</div>' +
-    '<div class="entry-meta"><span class="meta-item">' + dayLabel(a.due) + '</span></div>' +
-    '<div class="entry-actions"><button class="icon-btn" data-edit="actions" data-id="' + a.id + '">Edit</button>' +
-    '<button class="icon-btn danger" data-del="actions" data-id="' + a.id + '">Delete</button></div></div></div>').join('');
-  return head('Action checklist', 'Checklist sorted by due date with D-day and overdue indicators.', 'actions') +
-    (state.actions.length ? '<div class="entry-list">' + items + '</div>' : empty('No actions yet', 'Add things like "Get quote for tiles".'));
+  const board = cols.map(col => {
+    const cards = state.actions.filter(a => (a.status || 'pending') === col.id)
+      .sort((a, b) => (a.due || '').localeCompare(b.due || ''));
+    return '<div class="kanban-col"><div class="kanban-head"><span>' + col.title + '</span><em>' + cards.length + '</em></div>' +
+      '<div class="kanban-cards" data-drop="' + col.id + '">' +
+      (cards.length ? cards.map(a => '<article class="kanban-card" draggable="true" data-id="' + a.id + '">' +
+        '<div class="kanban-top"><p class="entry-name' + (a.status === 'done' ? ' done' : '') + '">' + esc(a.title) + '</p>' + actBtns('actions', a.id) + '</div>' +
+        (a.notes ? '<p class="entry-sub">' + esc(a.notes) + '</p>' : '') +
+        '<div class="kanban-foot">' + dayLabel(a.due) +
+        '<span class="kanban-move"><button type="button" class="icon-btn icon-only" data-move="' + a.id + '" data-dir="-1" aria-label="Move left">' + ICO.left + '</button>' +
+        '<button type="button" class="icon-btn icon-only" data-move="' + a.id + '" data-dir="1" aria-label="Move right">' + ICO.right + '</button></span></div></article>').join('') : '<p class="kanban-empty">Drop here</p>') +
+      '</div></div>';
+  }).join('');
+  return head('Action board', 'Drag cards between columns, or tap the arrows.', 'actions') +
+    (state.actions.length ? '<div class="kanban">' + board + '</div>' : empty('No actions yet', 'Add things like "Get quote for tiles".'));
 }
 
 function sellerQuoteRows() {
@@ -400,8 +449,7 @@ function renderSellers() {
     '<div class="entry-meta">' + (s.item ? '<span class="meta-item">' + esc(s.item) + '</span>' : '') +
     ((s.price !== '' && s.price != null) ? '<span class="meta-item">Quoted <strong>' + money(s.price) + '</strong></span>' : '') +
     (s.notes ? '<span class="meta-item">' + esc(s.notes) + '</span>' : '') + '</div>' +
-    '<div class="entry-actions"><button class="icon-btn" data-edit="sellers" data-id="' + s.id + '">Edit</button>' +
-    '<button class="icon-btn danger" data-del="sellers" data-id="' + s.id + '">Delete</button></div></div>').join('');
+    '<div class="entry-actions">' + actBtns('sellers', s.id) + '</div></div>').join('');
   const bestTable = intelligence.length
     ? ('<div class="dash-section"><p class="dash-title">Best Price Intelligence (from your receipts/screenshots)</p>' +
       '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Item</th><th>Category</th><th>Best seller</th><th>Best unit</th><th>Avg unit</th><th>Worst unit</th><th>Samples</th></tr></thead><tbody>' +
@@ -427,14 +475,15 @@ function renderPurchases() {
       empty('No purchases logged yet', 'Take a photo or pick from the gallery. AI fills the table; Save stays at the bottom.');
   }
 
-  const cats = [...new Set(state.purchases.map(p => p.category).filter(Boolean))].sort();
+  const cats = [...new Set(state.purchases.flatMap(p => purchaseCategories(p)))].sort();
   const catOpts = '<option value="">All categories</option>' + cats.map(c => '<option value="' + esc(c) + '"' + (purchaseCatFilter === c ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
 
   const q = purchaseSearch.toLowerCase();
   let filtered = state.purchases.filter(p => {
-    if (purchaseCatFilter && (p.category || '') !== purchaseCatFilter) return false;
-    if (q && !(p.item || '').toLowerCase().includes(q) && !(p.seller || '').toLowerCase().includes(q) &&
-        !(p.category || '').toLowerCase().includes(q) && !(p.receipt || '').toLowerCase().includes(q)) return false;
+    const pcats = purchaseCategories(p);
+    if (purchaseCatFilter && !pcats.includes(purchaseCatFilter) && (p.category || '') !== purchaseCatFilter) return false;
+    const blob = ((p.item || '') + ' ' + (p.seller || '') + ' ' + pcats.join(' ') + ' ' + (p.receipt || '')).toLowerCase();
+    if (q && !blob.includes(q)) return false;
     return true;
   });
 
@@ -454,15 +503,12 @@ function renderPurchases() {
     const displayPrice = purchaseTotal(p);
     rows += '<tr class="clickable" data-row-id="' + p.id + '">' +
       '<td>' + esc(p.date || '') + '</td>' +
-      '<td>' + (p.thumb ? '<img src="' + p.thumb + '" class="thumb-sm" data-lightbox="' + p.id + '" alt="">' : '') + esc(p.item || '') + '</td>' +
+      '<td class="item-cell">' + (p.thumb ? '<img src="' + p.thumb + '" class="thumb-sm" data-lightbox="' + p.id + '" alt="Receipt">' : '') + '<span>' + esc(p.item || '') + '</span></td>' +
       '<td>' + esc(p.seller || '') + '</td>' +
-      '<td>' + esc(p.category || '') + '</td>' +
+      '<td>' + catChips(p) + '</td>' +
       '<td class="num tight">' + money(displayPrice) + '</td>' +
       '<td>' + esc(p.receipt || '') + '</td>' +
-      '<td><div class="row-actions">' +
-      '<button class="icon-btn" data-edit="purchases" data-id="' + p.id + '">Edit</button>' +
-      '<button class="icon-btn danger" data-del="purchases" data-id="' + p.id + '">Delete</button>' +
-      '</div></td></tr>';
+      '<td>' + actBtns('purchases', p.id) + '</td></tr>';
 
     if (purchaseExpandedId === p.id) {
       rows += '<tr class="purchase-detail"><td colspan="7">' + renderPurchaseDetail(p) + '</td></tr>';
@@ -484,18 +530,18 @@ function renderPurchaseDetail(p) {
   html += '<dl class="detail-grid">';
   html += '<dt>Seller</dt><dd>' + esc(p.seller || '—') + '</dd>';
   html += '<dt>Date</dt><dd>' + esc(p.date || '—') + '</dd>';
-  html += '<dt>Category</dt><dd>' + esc(p.category || '—') + '</dd>';
+  html += '<dt>Category</dt><dd>' + catChips(p) + '</dd>';
   if (p.receipt) html += '<dt>Receipt #</dt><dd>' + esc(p.receipt) + '</dd>';
   if (p.driveLink) html += '<dt>Drive</dt><dd><a href="' + esc(p.driveLink) + '" target="_blank" rel="noopener">' + esc(p.driveFolder || 'Open in Drive') + '</a></dd>';
   const displayTotal = purchaseTotal(p);
   html += '<dt>Total</dt><dd class="tight">' + moneyDec(displayTotal) + '</dd>';
   html += '</dl>';
   if (Array.isArray(p.lines) && p.lines.length) {
-    html += '<table class="detail-lines"><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead><tbody>';
+    html += '<table class="detail-lines"><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th><th>Category</th></tr></thead><tbody>';
     p.lines.forEach(l => {
-      html += '<tr><td>' + esc(l.item || '') + '</td><td class="num">' + esc(l.qty || '') + '</td><td class="num">' + fmtNum(l.rate) + '</td><td class="num tight">' + moneyDec(lineAmount(l)) + '</td></tr>';
+      html += '<tr><td>' + esc(l.item || '') + '</td><td class="num">' + esc(l.qty || '') + '</td><td class="num">' + fmtNum(l.rate) + '</td><td class="num tight">' + moneyDec(lineAmount(l)) + '</td><td>' + (l.category ? '<span class="chip cat">' + esc(normalizeCategory(l.category)) + '</span>' : '—') + '</td></tr>';
     });
-    html += '<tr class="detail-total"><td colspan="3">Total</td><td class="num tight">' + moneyDec(displayTotal) + '</td></tr>';
+    html += '<tr class="detail-total"><td colspan="3">Total</td><td class="num tight">' + moneyDec(displayTotal) + '</td><td></td></tr>';
     html += '</tbody></table>';
   }
   return html;
@@ -538,8 +584,8 @@ function attach() {
   root.querySelectorAll('[data-lightbox]').forEach(im => im.onclick = e => {
     e.stopPropagation();
     const r = state.purchases.find(x => x.id === im.dataset.lightbox);
-    if (r && r.driveLink) { window.open(r.driveLink, '_blank', 'noopener'); return; }
-    if (r && r.thumb) { $('lightbox-img').src = r.thumb; $('lightbox').classList.add('show'); }
+    if (!r) return;
+    showLightbox(r.thumb || '', r.item || 'Receipt', r.driveLink);
   });
   root.querySelectorAll('[data-seller-lightbox]').forEach(im => im.onclick = e => {
     e.stopPropagation();
@@ -548,8 +594,7 @@ function attach() {
     if (!s || !Array.isArray(s.photos)) return;
     const ph = s.photos[Number(idx) || 0];
     if (!ph) return;
-    $('lightbox-img').src = ph.url || ph.thumb || '';
-    $('lightbox').classList.add('show');
+    showLightbox(ph.url || ph.thumb || '', s.name || 'Seller photo', ph.webViewLink);
   });
   const sellerSearchEl = root.querySelector('.seller-item-search');
   if (sellerSearchEl) {
@@ -573,10 +618,45 @@ function attach() {
     render();
   });
   root.querySelectorAll('tr.clickable[data-row-id]').forEach(tr => tr.onclick = e => {
-    if (e.target.closest('[data-edit],[data-del]')) return;
+    if (e.target.closest('[data-edit],[data-del],[data-lightbox]')) return;
     const id = tr.dataset.rowId;
     purchaseExpandedId = purchaseExpandedId === id ? null : id;
     render();
+  });
+  bindKanban(root);
+}
+
+function bindKanban(root) {
+  const order = ['pending', 'progress', 'done'];
+  root.querySelectorAll('.kanban-card').forEach(card => {
+    card.ondragstart = e => { e.dataTransfer.setData('text/plain', card.dataset.id); card.classList.add('dragging'); };
+    card.ondragend = () => card.classList.remove('dragging');
+  });
+  root.querySelectorAll('[data-drop]').forEach(col => {
+    col.ondragover = e => { e.preventDefault(); col.classList.add('drag-over'); };
+    col.ondragleave = () => col.classList.remove('drag-over');
+    col.ondrop = async e => {
+      e.preventDefault();
+      col.classList.remove('drag-over');
+      const it = state.actions.find(a => a.id === e.dataTransfer.getData('text/plain'));
+      if (!it || it.status === col.dataset.drop) return;
+      it.status = col.dataset.drop;
+      await persist('actions');
+      render();
+      if (settings.driveToken) scheduleCsvSync();
+    };
+  });
+  root.querySelectorAll('[data-move]').forEach(b => b.onclick = async e => {
+    e.stopPropagation();
+    const it = state.actions.find(a => a.id === b.dataset.move);
+    if (!it) return;
+    let i = order.indexOf(it.status || 'pending');
+    if (i < 0) i = 0;
+    i = Math.max(0, Math.min(order.length - 1, i + Number(b.dataset.dir)));
+    it.status = order[i];
+    await persist('actions');
+    render();
+    if (settings.driveToken) scheduleCsvSync();
   });
 }
 
@@ -657,13 +737,15 @@ function formBody(kind, p) {
       '<div class="receipt-meta">' +
       '<div class="field"><label>Seller</label><input id="m-seller" value="' + esc(p.seller) + '" placeholder="Shop / company" autocomplete="off"></div>' +
       '<div class="field"><label>Date</label><input type="date" id="m-date" value="' + esc(p.date || todayStr()) + '"></div>' +
-      '<div class="field"><label>Category</label><input list="category-options" id="m-category" value="' + esc(p.category) + '" placeholder="Foundation…"></div>' +
       '<div class="field"><label>Receipt no.</label><input id="m-receipt" value="' + esc(p.receipt) + '" placeholder="Optional"></div></div>' +
-      '<p class="field-hint receipt-table-label">Line items from the bill — AI fills this table; tap a cell to correct.</p>' +
+      '<div class="field wide"><label>Categories</label>' +
+      categoryPillsHtml(purchaseCategories(p)) +
+      '<p class="field-hint">Tap all that apply. AI also tags each line — change a line if it guessed wrong.</p></div>' +
+      '<p class="field-hint receipt-table-label">Line items — AI fills this; tap a cell to correct.</p>' +
       purchaseLinesHtml(lines) +
       '<div class="receipt-total-row">' +
       '<div class="field"><label class="req">Total (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="' + esc(p.price) + '" placeholder="Grand total"></div>' +
-      '<div class="field"><label class="req">Summary</label><input id="m-item" value="' + esc(p.item) + '" placeholder="Short label for the list"></div></div>';
+      '<div class="field"><label class="req">Summary</label><input id="m-item" value="' + esc(p.item) + '" placeholder="AI writes a short label" autocomplete="off"></div></div>';
   }
   return '';
 }
@@ -681,7 +763,7 @@ export function openModal(kind, rec) {
     budget: 'A category and the amount you planned for it.',
     actions: 'One thing still to do. Due date is optional.',
     sellers: 'A supplier and their quote, if you have it.',
-    purchases: 'Take or upload a receipt. AI fills the line-item table — you can correct it. Save stays at the bottom.'
+    purchases: 'Snap or pick a receipt. AI fills items, categories, and a short label. You can still correct anything.'
   }[kind];
   $('modal').innerHTML =
     '<div class="modal-head"><p class="modal-title">' + title + '</p>' +
@@ -755,7 +837,10 @@ function bindModal() {
       sellerPendingPhotos.push({file: f, ext: extFromFile(f), thumb: thumb || url, url: url || thumb, ocrDataUrl: ocrDataUrl || thumb || url});
     }
     const list = $('m-seller-photo-list');
-    if (list) list.innerHTML = sellerPendingPhotos.map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-modal-photo="' + i + '" alt="Seller photo ' + (i + 1) + '">').join('');
+    if (list) {
+      list.innerHTML = sellerPendingPhotos.map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-modal-photo="' + i + '" alt="Seller photo ' + (i + 1) + '">').join('');
+      bindSellerModalPhotos();
+    }
     const rm = $('m-seller-photo-remove');
     if (rm) rm.style.display = sellerPendingPhotos.length ? '' : 'none';
     if (settings.apiKey) await extractSellerLinesFromPending(false);
@@ -777,6 +862,24 @@ function bindModal() {
   };
   wireModelPicker('m-ai', 'm-ai-custom');
   bindLineTable();
+  const pills = $('m-cat-pills');
+  if (pills) pills.onclick = e => {
+    const b = e.target.closest('.cat-pill');
+    if (!b) return;
+    b.classList.toggle('on');
+  };
+  const sumEl = $('m-item');
+  if (sumEl) sumEl.addEventListener('input', () => { sumEl.dataset.autogen = '0'; });
+  bindSellerModalPhotos();
+}
+
+function bindSellerModalPhotos() {
+  document.querySelectorAll('[data-seller-modal-photo]').forEach(im => {
+    im.onclick = () => {
+      const ph = sellerPendingPhotos[Number(im.dataset.sellerModalPhoto)] || {};
+      showLightbox(ph.url || ph.thumb || '', 'Seller photo');
+    };
+  });
 }
 
 function showErr(msg) {
@@ -836,14 +939,17 @@ async function saveModal() {
     const form = readPurchaseForm();
     if (!form.item) return showErr('Enter a summary or at least one line item.');
     if (form.price === '' || !finiteNum(form.price) || +form.price < 0) return showErr('Enter a valid total amount.');
-    const cat = form.category || 'Uncategorized';
+    const cat = form.category || '';
+    const cats = (form.categories && form.categories.length) ? form.categories : (cat ? [cat] : []);
     const pending = session.pending;
     const pendingPhotos = pending && Array.isArray(pending.photos) ? pending.photos : [];
     const firstPending = pendingPhotos[0] || null;
     const thumb = session.photoCleared ? null : ((firstPending && firstPending.thumbDataUrl) || (session.editing ? session.editing.thumb : null) || null);
+    const summary = form.item || summarizePurchase(form.seller, form.lines);
     obj = {
-      item: form.item,
-      category: cat === 'Uncategorized' && !($('m-category') && $('m-category').value.trim()) ? '' : cat,
+      item: summary,
+      category: cats[0] || '',
+      categories: cats,
       seller: form.seller,
       price: +form.price,
       date: form.date || todayStr(),
@@ -1015,6 +1121,11 @@ export function bindShell() {
     if (settings.driveToken && session.syncStatus !== 'error') return;
     startGoogleLogin(false);
   });
+  const fab = $('fab-add');
+  if (fab) fab.onclick = () => {
+    const k = session.activeTab === 'dashboard' ? 'purchases' : session.activeTab;
+    if (TITLES[k]) openModal(k, null);
+  };
 }
 
 hub.render = render;

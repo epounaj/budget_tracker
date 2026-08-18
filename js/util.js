@@ -1,4 +1,4 @@
-import {CATEGORIES, CUR} from './config.js?v=20260818o';
+import {CATEGORIES, CUR} from './config.js?v=20260818p';
 
 export const $ = id => document.getElementById(id);
 export const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -62,6 +62,7 @@ export function normalizeCategory(raw) {
   const s = String(raw || '').trim();
   if (!s) return '';
   const low = s.toLowerCase();
+  if (low === 'uncategorized' || low === 'other') return 'Other';
   const exact = CATEGORIES.find(c => c.toLowerCase() === low);
   if (exact) return exact;
   const hit = CATEGORIES.find(c => {
@@ -69,6 +70,35 @@ export function normalizeCategory(raw) {
     return parts.some(p => low.includes(p) || p.includes(low));
   });
   return hit || s;
+}
+
+export function purchaseCategories(p) {
+  if (!p) return [];
+  if (Array.isArray(p.categories) && p.categories.length) {
+    return [...new Set(p.categories.map(normalizeCategory).filter(Boolean))];
+  }
+  const fromLines = Array.isArray(p.lines)
+    ? [...new Set(p.lines.map(l => normalizeCategory(l && l.category)).filter(Boolean))]
+    : [];
+  if (fromLines.length) return fromLines;
+  const one = normalizeCategory(p.category);
+  return one ? [one] : [];
+}
+
+export function summarizePurchase(seller, lines) {
+  const names = (lines || []).map(l => String((l && l.item) || '').trim()).filter(Boolean);
+  const cats = [...new Set((lines || []).map(l => normalizeCategory(l && l.category)).filter(Boolean))];
+  if (!names.length) return seller || '';
+  let label = names.length === 1 ? names[0] : (names[0] + ' + ' + (names.length - 1) + ' more');
+  label = label.replace(/\s+/g, ' ').slice(0, 56);
+  if (cats.length) label += ' · ' + cats.slice(0, 2).join(', ');
+  return label;
+}
+
+export function driveFolderName(raw) {
+  const n = folderSafe(normalizeCategory(raw) || raw);
+  if (!n || n.toLowerCase() === 'uncategorized') return 'Other';
+  return n;
 }
 
 let toastT;

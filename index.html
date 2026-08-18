@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0E9F6E">
 <title>Site Ledger</title>
-<link rel="stylesheet" href="css/app.css?v=20260818o">
+<link rel="stylesheet" href="css/app.css?v=20260818p">
 </head>
 <body>
 <div class="login-screen show" id="login-screen"><div class="login-card" id="login-card"></div></div>
@@ -36,7 +36,15 @@
 
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 <div class="overlay" id="settings-overlay"><div class="modal" id="settings-modal"></div></div>
-<div class="lightbox" id="lightbox"><button class="lightbox-close" id="lightbox-close">&times;</button><img id="lightbox-img" src="" alt="Receipt"></div>
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lightbox-close" aria-label="Close">&times;</button>
+  <img id="lightbox-img" src="" alt="Preview">
+  <div class="lightbox-bar" id="lightbox-bar" hidden>
+    <span id="lightbox-cap"></span>
+    <a id="lightbox-drive" target="_blank" rel="noopener" style="display:none">Open in Drive</a>
+  </div>
+</div>
+<button class="fab" id="fab-add" aria-label="Add new" title="Add">+</button>
 <div class="toast" id="toast"></div>
 
 <datalist id="category-options">
@@ -52,6 +60,6 @@
   <div class="chat-input-row"><input id="chat-input" placeholder="Ask about your budget…" autocomplete="off"><button id="chat-send" class="chat-send-btn">Send</button></div>
 </div>
 
-<script type="module" src="js/app.js?v=20260818o"></script>
+<script type="module" src="js/app.js?v=20260818p"></script>
 </body>
 </html>

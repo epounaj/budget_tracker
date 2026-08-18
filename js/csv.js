@@ -1,7 +1,7 @@
-import {uid} from './util.js?v=20260818o';
-import {state, persist, replaceLedger} from './store.js?v=20260818o';
-import {hub} from './hub.js?v=20260818o';
-import {toast, todayStr} from './util.js?v=20260818o';
+import {uid} from './util.js?v=20260818p';
+import {state, persist, replaceLedger} from './store.js?v=20260818p';
+import {hub} from './hub.js?v=20260818p';
+import {toast, todayStr} from './util.js?v=20260818p';
 
 function csvCell(v) {
   if (v == null) return '';
@@ -45,9 +45,10 @@ export function toCSV() {
   })), ['id', 'name', 'contact', 'item', 'price', 'status', 'notes', 'photos', 'photoLinks', 'quoteLines']);
   push('purchases', state.purchases.map(p => Object.assign({}, p, {
     lines: Array.isArray(p.lines) ? JSON.stringify(p.lines) : (p.lines || ''),
+    categories: Array.isArray(p.categories) ? JSON.stringify(p.categories) : (p.categories || ''),
     driveFileIds: Array.isArray(p.driveFileIds) ? JSON.stringify(p.driveFileIds) : (p.driveFileIds || ''),
     driveFiles: Array.isArray(p.driveFiles) ? JSON.stringify(p.driveFiles) : (p.driveFiles || '')
-  })), ['id', 'item', 'category', 'seller', 'price', 'date', 'receipt', 'notes', 'lines', 'driveLink', 'driveFileId', 'driveFolder', 'driveFileIds', 'driveFiles']);
+  })), ['id', 'item', 'category', 'categories', 'seller', 'price', 'date', 'receipt', 'notes', 'lines', 'driveLink', 'driveFileId', 'driveFolder', 'driveFileIds', 'driveFiles']);
   return lines.join('\n');
 }
 
@@ -80,6 +81,9 @@ export function fromCSV(text) {
     }
     if (o.driveFiles && typeof o.driveFiles === 'string' && o.driveFiles.trim().startsWith('[')) {
       try { o.driveFiles = JSON.parse(o.driveFiles); } catch (e) {}
+    }
+    if (o.categories && typeof o.categories === 'string' && o.categories.trim().startsWith('[')) {
+      try { o.categories = JSON.parse(o.categories); } catch (e) {}
     }
     if (!o.id) o.id = uid();
     fresh[section].push(o);

@@ -1,6 +1,7 @@
-import {settings, session} from './store.js?v=20260818o';
-import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines} from './util.js?v=20260818o';
-import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818o';
+import {settings, session} from './store.js?v=20260818p';
+import {$, toast, compressImage, extFromFile, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase} from './util.js?v=20260818p';
+import {CATEGORIES} from './config.js?v=20260818p';
+import {callVisionOCR, persistAiToProfile, readModelValue} from './ai.js?v=20260818p';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -65,11 +66,38 @@ export async function handlePhoto(file, append) {
   showPreview();
 }
 
-function emptyLine() { return {item: '', qty: '', rate: '', amount: ''}; }
+function emptyLine() { return {item: '', qty: '', rate: '', amount: '', category: ''}; }
+
+function catSelectHtml(selected) {
+  const sel = normalizeCategory(selected);
+  return '<select class="ln-cat" aria-label="Category"><option value="">Category</option>' +
+    CATEGORIES.map(c => '<option value="' + esc(c) + '"' + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
+    '</select>';
+}
+
+export function categoryPillsHtml(selected) {
+  const set = new Set((selected || []).map(normalizeCategory).filter(Boolean));
+  return '<div class="cat-pills" id="m-cat-pills">' +
+    CATEGORIES.map(c => '<button type="button" class="cat-pill' + (set.has(c) ? ' on' : '') + '" data-cat="' + esc(c) + '">' + esc(c) + '</button>').join('') +
+    '</div>';
+}
+
+export function readSelectedCategories() {
+  const fromLines = readLinesFromTable().map(l => normalizeCategory(l.category)).filter(Boolean);
+  const fromPills = [...document.querySelectorAll('#m-cat-pills .cat-pill.on')].map(b => normalizeCategory(b.dataset.cat)).filter(Boolean);
+  return [...new Set(fromPills.concat(fromLines))];
+}
+
+export function syncPillsFromLines() {
+  const cats = new Set(readLinesFromTable().map(l => normalizeCategory(l.category)).filter(Boolean));
+  document.querySelectorAll('#m-cat-pills .cat-pill').forEach(b => {
+    if (cats.size) b.classList.toggle('on', cats.has(b.dataset.cat));
+  });
+}
 
 function normalizeLine(ln) {
   if (ln == null) return emptyLine();
-  if (typeof ln === 'string') return {item: ln, qty: '', rate: '', amount: ''};
+  if (typeof ln === 'string') return {item: ln, qty: '', rate: '', amount: '', category: ''};
   const amount = parseMoney(ln.amount ?? ln.total ?? ln.line_total ?? ln.lineTotal);
   const rate = parseMoney(ln.rate ?? ln.unit_price ?? ln.unitPrice ?? ln.price);
   const qty = ln.qty != null && ln.qty !== '' ? ln.qty : (ln.quantity != null ? ln.quantity : '');
@@ -77,7 +105,8 @@ function normalizeLine(ln) {
     item: String(ln.item || ln.description || ln.name || ln.product || '').trim(),
     qty,
     rate: rate === '' ? '' : rate,
-    amount: amount === '' ? '' : amount
+    amount: amount === '' ? '' : amount,
+    category: normalizeCategory(ln.category || ln.cat || '')
   };
   const computed = lineAmount(line);
   if (computed) line.amount = computed;
@@ -95,10 +124,17 @@ export function normalizeOcr(data) {
   const seller = String(data.seller || data.vendor || data.store || data.merchant || data.shop || data.company || '').trim();
   const receipt = String(data.receipt || data.invoice || data.invoice_no || data.invoice_number || data.bill_no || data.receipt_no || '').trim();
   const date = parseDateISO(data.date || data.invoice_date || data.bill_date || data.dated);
-  const item = String(data.item || data.summary || '').trim() || lines.map(l => l.item).filter(Boolean).slice(0, 4).join(', ');
-  const category = normalizeCategory(data.category);
-  if (!lines.length && (item || total !== '')) lines = [{item: item || '', qty: '', rate: '', amount: total}];
-  return {seller, date, receipt, category, total, item, lines};
+  const fromLines = [...new Set(lines.map(l => l.category).filter(Boolean))];
+  let categories = [];
+  if (Array.isArray(data.categories)) categories = data.categories.map(normalizeCategory).filter(Boolean);
+  const oneCat = normalizeCategory(data.category);
+  if (oneCat) categories.push(oneCat);
+  categories = [...new Set(categories.concat(fromLines))];
+  if (!lines.length && (data.item || data.summary || total !== '')) {
+    lines = [{item: String(data.item || data.summary || '').trim(), qty: '', rate: '', amount: total, category: oneCat || ''}];
+  }
+  const item = String(data.summary || data.item || '').trim() || summarizePurchase(seller, lines);
+  return {seller, date, receipt, category: categories[0] || '', categories, total, item, lines};
 }
 
 function lineRowHtml(ln) {
@@ -108,6 +144,7 @@ function lineRowHtml(ln) {
     '<td class="col-qty"><input class="ln-qty" value="' + esc(ln.qty) + '" placeholder="Qty" inputmode="decimal"></td>' +
     '<td class="col-rate"><input class="ln-rate" value="' + esc(ln.rate) + '" placeholder="Rate" inputmode="decimal"></td>' +
     '<td class="col-amt"><input class="ln-amount" value="' + esc(ln.amount) + '" placeholder="Rs" inputmode="decimal"></td>' +
+    '<td class="col-cat">' + catSelectHtml(ln.category) + '</td>' +
     '<td class="col-del"><button type="button" class="ln-del" aria-label="Remove row">&times;</button></td>' +
     '</tr>';
 }
@@ -115,7 +152,7 @@ function lineRowHtml(ln) {
 export function purchaseLinesHtml(lines) {
   const rows = (lines && lines.length) ? lines : [emptyLine()];
   return '<div class="receipt-table-wrap">' +
-    '<table class="receipt-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th><th></th></tr></thead>' +
+    '<table class="receipt-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th><th>Category</th><th></th></tr></thead>' +
     '<tbody id="m-lines">' + rows.map(lineRowHtml).join('') + '</tbody></table></div>' +
     '<button type="button" class="line-add" id="m-line-add">+ Add row</button>';
 }
@@ -128,7 +165,8 @@ export function readLinesFromTable() {
       item: (tr.querySelector('.ln-item') && tr.querySelector('.ln-item').value.trim()) || '',
       qty: (tr.querySelector('.ln-qty') && tr.querySelector('.ln-qty').value.trim()) || '',
       rate: parseMoney(tr.querySelector('.ln-rate') && tr.querySelector('.ln-rate').value),
-      amount: parseMoney(tr.querySelector('.ln-amount') && tr.querySelector('.ln-amount').value)
+      amount: parseMoney(tr.querySelector('.ln-amount') && tr.querySelector('.ln-amount').value),
+      category: normalizeCategory(tr.querySelector('.ln-cat') && tr.querySelector('.ln-cat').value)
     };
     const computed = lineAmount(row);
     if (computed) row.amount = computed;
@@ -146,8 +184,13 @@ function syncTotalFromLines() {
 function fillSummaryFromLines() {
   const itemEl = $('m-item');
   if (!itemEl) return;
-  const names = readLinesFromTable().map(l => l.item).filter(Boolean);
-  if (!String(itemEl.value || '').trim() && names.length) itemEl.value = names.slice(0, 4).join(', ');
+  const lines = readLinesFromTable();
+  const next = summarizePurchase(($('m-seller') && $('m-seller').value.trim()) || '', lines);
+  if (!String(itemEl.value || '').trim() || itemEl.dataset.autogen === '1') {
+    itemEl.value = next;
+    itemEl.dataset.autogen = '1';
+  }
+  syncPillsFromLines();
 }
 
 export function renderLinesIntoTable(lines, overwrite) {
@@ -192,6 +235,12 @@ export function bindLineTable() {
     syncTotalFromLines();
     fillSummaryFromLines();
   });
+  body.addEventListener('change', e => {
+    if (e.target && e.target.classList.contains('ln-cat')) {
+      syncPillsFromLines();
+      fillSummaryFromLines();
+    }
+  });
 }
 
 export function applyOcrFields(raw, overwrite) {
@@ -212,13 +261,24 @@ export function applyOcrFields(raw, overwrite) {
   if (set('m-category', data.category)) filled.push('category');
   if (set('m-receipt', data.receipt)) filled.push('receipt no.');
   renderLinesIntoTable(data.lines, overwrite);
+  syncPillsFromLines();
+  const cats = data.categories && data.categories.length ? data.categories : (data.category ? [data.category] : []);
+  if (cats.length) {
+    document.querySelectorAll('#m-cat-pills .cat-pill').forEach(b => b.classList.toggle('on', cats.includes(b.dataset.cat)));
+  }
   const sum = sumLines(data.lines);
   const total = data.total !== '' && data.total != null ? data.total : sum;
   if (total !== '' && $('m-price') && (overwrite || !String($('m-price').value || '').trim())) {
     $('m-price').value = total;
     filled.push('total');
   }
-  if (set('m-item', data.item)) filled.push('summary');
+  const summary = data.item || summarizePurchase(data.seller, data.lines);
+  const itemEl = $('m-item');
+  if (itemEl && summary && (overwrite || !String(itemEl.value || '').trim() || itemEl.dataset.autogen === '1')) {
+    itemEl.value = summary;
+    itemEl.dataset.autogen = '1';
+    filled.push('summary');
+  }
   if (data.lines.length) filled.push(data.lines.length + ' line' + (data.lines.length === 1 ? '' : 's'));
   return {data, filled};
 }
@@ -246,7 +306,7 @@ export async function runOCR(overwrite) {
   if (btn) btn.disabled = true;
   ocrStatus('Reading ' + photos.length + ' receipt page' + (photos.length === 1 ? '' : 's') + ' with ' + (settings.provider === 'custom' ? (settings.model || 'custom model') : settings.provider) + '…', false);
   try {
-    const merged = {seller: '', date: '', receipt: '', category: '', total: '', item: '', lines: []};
+    const merged = {seller: '', date: '', receipt: '', category: '', categories: [], total: '', item: '', lines: []};
     for (let i = 0; i < photos.length; i++) {
       const ph = photos[i];
       ocrStatus('Reading page ' + (i + 1) + ' of ' + photos.length + '…', false);
@@ -257,9 +317,12 @@ export async function runOCR(overwrite) {
       if (!merged.date && d.date) merged.date = d.date;
       if (!merged.receipt && d.receipt) merged.receipt = d.receipt;
       if (!merged.category && d.category) merged.category = d.category;
+      if (Array.isArray(d.categories)) merged.categories.push(...d.categories);
       if (!merged.item && d.item) merged.item = d.item;
       if (Array.isArray(d.lines) && d.lines.length) merged.lines.push(...d.lines);
     }
+    merged.categories = [...new Set(merged.categories.concat(merged.lines.map(l => l.category)).filter(Boolean))];
+    if (!merged.item) merged.item = summarizePurchase(merged.seller, merged.lines);
     const result = applyOcrFields(merged, !!overwrite);
     const n = result && result.data && result.data.lines ? result.data.lines.length : 0;
     const who = ($('m-seller') && $('m-seller').value) || 'the receipt';
@@ -334,11 +397,10 @@ export function readPurchaseForm() {
   const seller = ($('m-seller') && $('m-seller').value.trim()) || '';
   const date = ($('m-date') && $('m-date').value) || '';
   const receipt = ($('m-receipt') && $('m-receipt').value.trim()) || '';
-  const category = normalizeCategory(($('m-category') && $('m-category').value.trim()) || '');
-  // Always prefer the sum of line amounts as the authoritative total.
-  // Fall back to the manual total field only if there are no lines.
+  const categories = readSelectedCategories();
+  const category = categories[0] || '';
   const lineSum = sumLines(lines);
   let price = lineSum || parseMoney($('m-price') && $('m-price').value);
-  const item = (($('m-item') && $('m-item').value.trim()) || lines.map(l => l.item).filter(Boolean).join(', ')).trim();
-  return {lines, seller, date, receipt, category, price, item};
+  const item = (($('m-item') && $('m-item').value.trim()) || summarizePurchase(seller, lines)).trim();
+  return {lines, seller, date, receipt, category, categories, price, item};
 }
