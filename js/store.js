@@ -3,7 +3,7 @@ import {DB_NAME, STORES, TOKEN_KEY} from './config.js?v=20260818a';
 let db;
 export let state = {funds: [], budget: [], actions: [], sellers: [], purchases: []};
 export let settings = {
-  provider: 'openai', apiKey: '', model: '', apiBase: '', models: [], profiles: {},
+  provider: 'openai', apiKey: '', model: '', apiBase: '', chatModel: '', models: [], profiles: {},
   driveClientId: '', driveToken: null, driveTokenExp: 0, driveFolderId: '', user: null, userSub: '', autoCsv: true,
   csvSyncedAt: '', csvDirty: false
 };
@@ -96,7 +96,8 @@ export function snapshotAi() {
     model: settings.model || '',
     apiBase: settings.apiBase || '',
     models: Array.isArray(settings.models) ? settings.models.slice(0, 400) : [],
-    driveFolderId: settings.driveFolderId || ''
+    driveFolderId: settings.driveFolderId || '',
+    chatModel: settings.chatModel || ''
   };
 }
 export function applyAi(p) {
@@ -107,6 +108,7 @@ export function applyAi(p) {
   if (p.apiBase != null) settings.apiBase = p.apiBase;
   if (Array.isArray(p.models)) settings.models = p.models.slice(0, 400);
   if (p.driveFolderId) settings.driveFolderId = p.driveFolderId;
+  if (p.chatModel != null) settings.chatModel = p.chatModel;
 }
 export function stashAi(sub) {
   if (!sub) return;

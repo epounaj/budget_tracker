@@ -13,9 +13,11 @@ import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818a';
 import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818a';
 import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818a';
 import {bindShell} from './ui.js?v=20260818a';
+import {initChat} from './chat.js?v=20260818a';
 import {appClientId} from './drive.js?v=20260818a';
 
 bindShell();
+initChat();
 const _bt = document.getElementById('build-tag');
 if (_bt) _bt.textContent = APP_VERSION;
 
@@ -23,6 +25,8 @@ if (_bt) _bt.textContent = APP_VERSION;
   renderLogin();
   try {
     await loadAll();
+    session.activeTab = localStorage.getItem('sl.tab') || 'dashboard';
+    document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x.dataset.tab === session.activeTab));
     restoreSavedToken();
     session.lastClientId = GOOGLE_CLIENT_ID || settings.driveClientId || '';
     await loadGis();

@@ -29,12 +29,11 @@ function spentForCat(c) { return state.purchases.filter(p => (p.category || '').
 function computeSummary() {
   const loan = loanReceived(), cash = ownCash(), spent = totalSpent(), avail = loan + cash - spent;
   const av = $('avail-value');
-  av.textContent = money(avail);
-  av.classList.toggle('negative', avail < 0);
-  $('stat-loan').textContent = money(loan);
-  $('stat-cash').textContent = money(cash);
-  $('stat-spent').textContent = money(spent);
-  $('stat-pending').textContent = state.actions.filter(a => a.status !== 'done').length;
+  if (av) { av.textContent = money(avail); av.classList.toggle('negative', avail < 0); }
+  const sl = $('stat-loan'); if (sl) sl.textContent = money(loan);
+  const sc = $('stat-cash'); if (sc) sc.textContent = money(cash);
+  const ss = $('stat-spent'); if (ss) ss.textContent = money(spent);
+  const sp = $('stat-pending'); if (sp) sp.textContent = state.actions.filter(a => a.status !== 'done').length;
 }
 
 function head(title, desc, kind) {
@@ -42,6 +41,100 @@ function head(title, desc, kind) {
     '<button class="add-btn" data-add="' + kind + '"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add</button></div>';
 }
 function empty(b, s) { return '<div class="empty-state"><p class="big">' + b + '</p><p class="small">' + s + '</p></div>'; }
+
+function renderDashboard() {
+  const loan = loanReceived(), cash = ownCash(), spent = totalSpent(), avail = loan + cash - spent;
+  const total = loan + cash;
+
+  // Summary cards
+  let html = '<div class="summary">' +
+    '<div class="avail-block"><div><p class="avail-label">Available funds now</p>' +
+    '<p class="avail-value' + (avail < 0 ? ' negative' : '') + '" id="avail-value">' + money(avail) + '</p></div>' +
+    '<p class="avail-hint">Loan received + own cash − everything spent</p></div>' +
+    '<div class="stat-grid">' +
+    '<div><p class="stat-label"><span class="stat-dot" style="background:var(--loan)"></span>Loan received</p><p class="stat-value" id="stat-loan" style="color:var(--loan)">' + money(loan) + '</p></div>' +
+    '<div><p class="stat-label"><span class="stat-dot" style="background:var(--ink-2)"></span>Own cash</p><p class="stat-value" id="stat-cash">' + money(cash) + '</p></div>' +
+    '<div><p class="stat-label"><span class="stat-dot" style="background:var(--spend)"></span>Spent</p><p class="stat-value" id="stat-spent" style="color:var(--spend)">' + money(spent) + '</p></div>' +
+    '<div><p class="stat-label"><span class="stat-dot" style="background:var(--accent)"></span>Pending</p><p class="stat-value" id="stat-pending">' + state.actions.filter(a => a.status !== 'done').length + '</p></div>' +
+    '</div></div>';
+
+  // Loan disbursement alerts
+  html += '<div class="dash-section"><p class="dash-title">Fund health</p>';
+  if (spent > 0) {
+    const ratio = avail / spent;
+    if (ratio > 0.3) html += '<div class="alert-card green"><p class="alert-title">🟢 Funds healthy</p><p class="alert-body">Available funds are above 30% of total spent.</p></div>';
+    else if (ratio >= 0.1) html += '<div class="alert-card yellow"><p class="alert-title">🟡 Running low — request next tranche soon</p><p class="alert-body">Available funds are between 10–30% of total spent.</p></div>';
+    else html += '<div class="alert-card red"><p class="alert-title">🔴 Funds critical — request disbursement NOW</p><p class="alert-body">Available funds are below 10% of total spent.</p></div>';
+  } else {
+    html += '<div class="alert-card green"><p class="alert-title">🟢 Funds healthy</p><p class="alert-body">No spending recorded yet.</p></div>';
+  }
+  // Runway projection
+  const now = Date.now(), thirtyDaysAgo = now - 30 * 86400000;
+  const recentSpend = state.purchases.filter(p => {
+    const d = p.date ? new Date(p.date).getTime() : 0;
+    return d >= thirtyDaysAgo && d <= now;
+  }).reduce((s, p) => s + (+p.price || 0), 0);
+  const days30 = Math.min(30, state.purchases.length ? 30 : 0);
+  const avgDaily = days30 > 0 ? recentSpend / 30 : 0;
+  if (avgDaily > 0) {
+    const runwayDays = Math.round(Math.max(0, avail) / avgDaily);
+    const next30 = Math.round(avgDaily * 30);
+    html += '<div class="alert-card green"><p class="alert-title">Projected runway</p>' +
+      '<p class="alert-body">At current spending rate, funds last ~' + runwayDays + ' more days.</p></div>' +
+      '<div class="alert-card green"><p class="alert-title">Next disbursement suggestion</p>' +
+      '<p class="alert-body">Request ' + money(next30) + ' to cover next 30 days based on average spending.</p></div>';
+  }
+  html += '</div>';
+
+  // Budget vs Actual bars
+  if (state.budget.length) {
+    html += '<div class="dash-section"><p class="dash-title">Budget vs Actual</p><table class="dash-table"><thead><tr>' +
+      '<th>Category</th><th>Budgeted</th><th>Spent</th><th>Remaining</th><th></th></tr></thead><tbody>';
+    state.budget.forEach(b => {
+      const bud = +b.budgeted || 0, sp = spentForCat(b.category), rem = bud - sp;
+      const w = bud > 0 ? Math.min(100, sp / bud * 100) : 0;
+      const over = sp > bud;
+      html += '<tr><td>' + esc(b.category) + '</td><td class="dash-stat">' + money(bud) + '</td>' +
+        '<td class="dash-stat">' + money(sp) + '</td>' +
+        '<td class="dash-stat" style="color:' + (rem < 0 ? 'var(--spend)' : 'var(--accent)') + '">' + money(rem) + '</td>' +
+        '<td>' + (over ? '<span class="over-badge">OVER BUDGET</span>' : '') + '</td></tr>' +
+        '<tr><td colspan="5" style="padding:0 6px 8px"><div class="bar"><span class="' + (over ? 'over' : '') + '" style="width:' + w + '%"></span></div></td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // Top sellers by spend
+  const sellerTotals = {};
+  state.purchases.forEach(p => {
+    const s = (p.seller || '').trim();
+    if (s) sellerTotals[s] = (sellerTotals[s] || 0) + (+p.price || 0);
+  });
+  const topSellers = Object.entries(sellerTotals).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  if (topSellers.length) {
+    html += '<div class="dash-section"><p class="dash-title">Top sellers by spend</p><table class="dash-table"><thead><tr><th>Seller</th><th>Total</th></tr></thead><tbody>';
+    topSellers.forEach(([name, amt]) => {
+      html += '<tr><td>' + esc(name) + '</td><td class="dash-stat">' + money(amt) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // Category breakdown
+  const catTotals = {};
+  state.purchases.forEach(p => {
+    const c = (p.category || 'Uncategorized').trim();
+    catTotals[c] = (catTotals[c] || 0) + (+p.price || 0);
+  });
+  const catList = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+  if (catList.length) {
+    html += '<div class="dash-section"><p class="dash-title">Category breakdown</p><table class="dash-table"><thead><tr><th>Category</th><th>Spent</th></tr></thead><tbody>';
+    catList.forEach(([cat, amt]) => {
+      html += '<tr><td>' + esc(cat) + '</td><td class="dash-stat">' + money(amt) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  return html;
+}
 
 function renderFunds() {
   const sorted = [...state.funds].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -95,26 +188,92 @@ function renderSellers() {
   return head('Seller shortlist', 'Compare suppliers and contractors you\'re considering.', 'sellers') +
     (state.sellers.length ? '<div class="entry-list">' + items + '</div>' : empty('No sellers shortlisted yet', 'Add suppliers with their quoted price and status.'));
 }
+let purchaseSort = {col: 'date', asc: false};
+let purchaseSearch = '';
+let purchaseCatFilter = '';
+let purchaseExpandedId = null;
+
 function renderPurchases() {
-  const sorted = [...state.purchases].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const items = sorted.map(p => '<div class="entry"><div class="entry-top" style="gap:12px">' +
-    (p.thumb ? '<img src="' + p.thumb + '" class="thumb" data-lightbox="' + p.id + '" alt="Receipt">' : '') +
-    '<div style="flex:1"><p class="entry-name">' + esc(p.item) + '</p>' +
-    '<p class="entry-sub">' + (p.seller ? esc(p.seller) : '') + ((p.seller && p.date) ? ' · ' : '') + (p.date ? esc(p.date) : '') +
-    (Array.isArray(p.lines) && p.lines.length > 1 ? ' · ' + p.lines.length + ' lines' : '') + '</p></div>' +
-    '<span class="entry-amount">' + money(p.price) + '</span></div>' +
-    '<div class="entry-meta">' + (p.category ? '<span class="tag">' + esc(p.category) + '</span>' : '') +
-    (p.receipt ? '<span class="meta-item">Receipt <strong>' + esc(p.receipt) + '</strong></span>' : '') +
-    (p.driveLink ? '<a class="meta-item" href="' + esc(p.driveLink) + '" target="_blank" rel="noopener">' + (p.driveFolder ? esc(p.driveFolder) : 'Original on Drive') + '</a>' : (p.thumb ? '<span class="meta-item">Photo</span>' : '')) + '</div>' +
-    '<div class="entry-actions"><button class="icon-btn" data-edit="purchases" data-id="' + p.id + '">Edit</button>' +
-    '<button class="icon-btn danger" data-del="purchases" data-id="' + p.id + '">Delete</button></div></div>').join('');
+  if (!state.purchases.length) {
+    return head('Purchases &amp; receipts', 'Camera or Gallery scans with AI. Correct the fields, then Save. The original photo is kept.', 'purchases') +
+      empty('No purchases logged yet', 'Take a photo or pick from the gallery. AI fills the table; Save stays at the bottom.');
+  }
+
+  const cats = [...new Set(state.purchases.map(p => p.category).filter(Boolean))].sort();
+  const catOpts = '<option value="">All categories</option>' + cats.map(c => '<option value="' + esc(c) + '"' + (purchaseCatFilter === c ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+
+  const q = purchaseSearch.toLowerCase();
+  let filtered = state.purchases.filter(p => {
+    if (purchaseCatFilter && (p.category || '') !== purchaseCatFilter) return false;
+    if (q && !(p.item || '').toLowerCase().includes(q) && !(p.seller || '').toLowerCase().includes(q) &&
+        !(p.category || '').toLowerCase().includes(q) && !(p.receipt || '').toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const sc = purchaseSort.col, dir = purchaseSort.asc ? 1 : -1;
+  filtered.sort((a, b) => {
+    let va = a[sc] || '', vb = b[sc] || '';
+    if (sc === 'price') return (((+va) || 0) - ((+vb) || 0)) * dir;
+    return String(va).localeCompare(String(vb)) * dir;
+  });
+
+  const arrow = col => '<span class="sort-arrow">' + (purchaseSort.col === col ? (purchaseSort.asc ? '▲' : '▼') : '') + '</span>';
+  const thCls = col => purchaseSort.col === col ? ' class="sorted"' : '';
+  const cols = [['date','Date'],['item','Item'],['seller','Seller'],['category','Category'],['price','Total'],['receipt','Receipt #']];
+
+  let rows = '';
+  filtered.forEach(p => {
+    rows += '<tr class="clickable" data-row-id="' + p.id + '">' +
+      '<td>' + esc(p.date || '') + '</td>' +
+      '<td>' + (p.thumb ? '<img src="' + p.thumb + '" class="thumb-sm" data-lightbox="' + p.id + '" alt="">' : '') + esc(p.item || '') + '</td>' +
+      '<td>' + esc(p.seller || '') + '</td>' +
+      '<td>' + esc(p.category || '') + '</td>' +
+      '<td style="font-family:ui-monospace,\'SF Mono\',Menlo,monospace;font-weight:600">' + money(p.price) + '</td>' +
+      '<td>' + esc(p.receipt || '') + '</td>' +
+      '<td><div class="row-actions">' +
+      '<button class="icon-btn" data-edit="purchases" data-id="' + p.id + '">Edit</button>' +
+      '<button class="icon-btn danger" data-del="purchases" data-id="' + p.id + '">Delete</button>' +
+      '</div></td></tr>';
+
+    if (purchaseExpandedId === p.id) {
+      rows += '<tr class="purchase-detail"><td colspan="7">' + renderPurchaseDetail(p) + '</td></tr>';
+    }
+  });
+
   return head('Purchases &amp; receipts', 'Camera or Gallery scans with AI. Correct the fields, then Save. The original photo is kept.', 'purchases') +
-    (state.purchases.length ? '<div class="entry-list">' + items + '</div>' : empty('No purchases logged yet', 'Take a photo or pick from the gallery. AI fills the table; Save stays at the bottom.'));
+    '<div class="purchase-toolbar">' +
+    '<input class="purchase-search" placeholder="Search purchases\u2026" value="' + esc(purchaseSearch) + '">' +
+    '<select class="purchase-cat-filter">' + catOpts + '</select></div>' +
+    '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr>' +
+    cols.map(([k, l]) => '<th data-sort="' + k + '"' + thCls(k) + '>' + l + arrow(k) + '</th>').join('') +
+    '<th>Actions</th></tr></thead><tbody>' + (rows || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--ink-2)">No matches</td></tr>') + '</tbody></table></div>';
+}
+
+function renderPurchaseDetail(p) {
+  let html = '';
+  if (p.thumb) html += '<img src="' + p.thumb + '" class="detail-photo" data-lightbox="' + p.id + '" alt="Receipt">';
+  html += '<dl class="detail-grid">';
+  html += '<dt>Seller</dt><dd>' + esc(p.seller || '—') + '</dd>';
+  html += '<dt>Date</dt><dd>' + esc(p.date || '—') + '</dd>';
+  html += '<dt>Category</dt><dd>' + esc(p.category || '—') + '</dd>';
+  if (p.receipt) html += '<dt>Receipt #</dt><dd>' + esc(p.receipt) + '</dd>';
+  if (p.driveLink) html += '<dt>Drive</dt><dd><a href="' + esc(p.driveLink) + '" target="_blank" rel="noopener">' + esc(p.driveFolder || 'Open in Drive') + '</a></dd>';
+  html += '<dt>Total</dt><dd style="font-weight:600">' + money(p.price) + '</dd>';
+  html += '</dl>';
+  if (Array.isArray(p.lines) && p.lines.length) {
+    html += '<table class="detail-lines"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>';
+    p.lines.forEach(l => {
+      html += '<tr><td>' + esc(l.item || '') + '</td><td>' + esc(l.qty || '') + '</td><td>' + esc(l.rate || '') + '</td><td>' + money(l.amount) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  }
+  return html;
 }
 
 export function render() {
   computeSummary();
-  $('panel-root').innerHTML = ({funds: renderFunds, budget: renderBudget, actions: renderActions, sellers: renderSellers, purchases: renderPurchases}[session.activeTab])();
+  const renderer = {dashboard: renderDashboard, funds: renderFunds, budget: renderBudget, actions: renderActions, sellers: renderSellers, purchases: renderPurchases}[session.activeTab];
+  $('panel-root').innerHTML = renderer ? renderer() : renderDashboard();
   attach();
   updateSyncPill();
 }
@@ -139,10 +298,34 @@ function attach() {
     const it = state.actions.find(a => a.id === b.dataset.done);
     if (it) { it.status = 'done'; await persist('actions'); render(); if (settings.driveToken) scheduleCsvSync(); }
   });
-  root.querySelectorAll('[data-lightbox]').forEach(im => im.onclick = () => {
+  root.querySelectorAll('[data-lightbox]').forEach(im => im.onclick = e => {
+    e.stopPropagation();
     const r = state.purchases.find(x => x.id === im.dataset.lightbox);
     if (r && r.driveLink) { window.open(r.driveLink, '_blank', 'noopener'); return; }
     if (r && r.thumb) { $('lightbox-img').src = r.thumb; $('lightbox').classList.add('show'); }
+  });
+  const searchEl = root.querySelector('.purchase-search');
+  if (searchEl) {
+    searchEl.oninput = e => { purchaseSearch = e.target.value; render(); };
+    if (document.activeElement === null || purchaseSearch) {
+      const pos = searchEl.value.length;
+      searchEl.focus();
+      searchEl.setSelectionRange(pos, pos);
+    }
+  }
+  const catEl = root.querySelector('.purchase-cat-filter');
+  if (catEl) catEl.onchange = e => { purchaseCatFilter = e.target.value; render(); };
+  root.querySelectorAll('.purchase-table th[data-sort]').forEach(th => th.onclick = () => {
+    const col = th.dataset.sort;
+    if (purchaseSort.col === col) purchaseSort.asc = !purchaseSort.asc;
+    else { purchaseSort.col = col; purchaseSort.asc = true; }
+    render();
+  });
+  root.querySelectorAll('tr.clickable[data-row-id]').forEach(tr => tr.onclick = e => {
+    if (e.target.closest('[data-edit],[data-del]')) return;
+    const id = tr.dataset.rowId;
+    purchaseExpandedId = purchaseExpandedId === id ? null : id;
+    render();
   });
 }
 
@@ -333,6 +516,12 @@ async function saveModal() {
       lines: form.lines,
       thumb
     };
+    if (obj.receipt) {
+      const rn = obj.receipt.trim().toLowerCase();
+      const editId = session.editing ? session.editing.id : null;
+      const dup = state.purchases.find(x => x.id !== editId && (x.receipt || '').trim().toLowerCase() === rn && rn);
+      if (dup && !confirm('Receipt #' + obj.receipt + ' already exists on ' + (dup.date || '?') + ' from ' + (dup.seller || '?') + '. Save anyway?')) return;
+    }
     if (pending && pending.originalFile && settings.driveToken) {
       try {
         if (session.editing && session.editing.driveFileId) await deleteDriveFile(session.editing.driveFileId);
@@ -382,6 +571,8 @@ export function renderSettings() {
     '<div class="field" style="margin-bottom:10px"><label>API key</label><input id="set-key" type="password" value="' + esc(settings.apiKey) + '" placeholder="sk-… or your provider key" autocomplete="off"></div>' +
     modelPickerHtml('set') +
     '<div class="set-note">Provider, key, chosen model, and the model list are saved to <b>your</b> Google Drive profile.</div></div>' +
+    '<div class="set-section"><h3>AI Chat assistant</h3><p class="hint">Choose a model for the chat bot. Can be different from the receipt scanner (e.g. a cheaper/faster model).</p>' +
+    '<div class="field" style="margin-bottom:10px"><label>Chat model</label><select id="set-chat-model"><option value="">Same as scan model</option></select></div></div>' +
     '<div class="set-section"><h3>Manual backup (CSV)</h3><p class="hint">Export a local copy, or import to replace current data.</p>' +
     '<div class="set-row"><button class="set-btn" id="csv-export">Export CSV</button>' +
     '<button class="set-btn" id="csv-import">Import CSV</button>' +
@@ -389,6 +580,20 @@ export function renderSettings() {
     '<div class="modal-actions"><button class="btn-primary" id="set-save">Save settings</button></div>';
   $('set-close').onclick = () => $('settings-overlay').classList.remove('show');
   wireModelPicker('set', 'set-custom');
+  const chatModelSel = $('set-chat-model');
+  if (chatModelSel && Array.isArray(settings.models)) {
+    settings.models.forEach(id => {
+      const o = document.createElement('option');
+      o.value = id; o.textContent = id;
+      if (id === settings.chatModel) o.selected = true;
+      chatModelSel.appendChild(o);
+    });
+    if (settings.chatModel && !settings.models.includes(settings.chatModel)) {
+      const o = document.createElement('option');
+      o.value = settings.chatModel; o.textContent = settings.chatModel; o.selected = true;
+      chatModelSel.appendChild(o);
+    }
+  }
   $('set-save').onclick = async () => {
     settings.provider = $('set-provider').value;
     settings.apiKey = $('set-key').value.trim();
@@ -396,6 +601,7 @@ export function renderSettings() {
     const baseEl = $('set-base'); if (baseEl) settings.apiBase = baseEl.value.trim();
     const modelSel = $('set-model');
     if (modelSel && Array.isArray(modelSel._allModels) && modelSel._allModels.length) settings.models = modelSel._allModels.slice(0, 400);
+    const chatMSel = $('set-chat-model'); if (chatMSel) settings.chatModel = chatMSel.value;
     if (settings.provider === 'custom') {
       if (!settings.apiBase) { toast('Enter the custom API base URL'); return; }
       if (!settings.model) { toast('Choose a model, or tap Other to type one'); return; }
@@ -434,6 +640,7 @@ export function bindShell() {
     const b = e.target.closest('.tab-btn');
     if (!b) return;
     session.activeTab = b.dataset.tab;
+    localStorage.setItem('sl.tab', session.activeTab);
     document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x.dataset.tab === session.activeTab));
     render();
   });

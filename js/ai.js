@@ -56,6 +56,12 @@ export async function listProviderModels(provider, apiKey, apiBase) {
   return parseModelsList(await res.json());
 }
 
+export function chatConfig() {
+  const cfg = providerConfig();
+  if (settings.chatModel) cfg.model = settings.chatModel;
+  return cfg;
+}
+
 export function providerConfig() {
   const p = settings.provider;
   if (p === 'openai') return {url: 'https://api.openai.com/v1/chat/completions', model: settings.model || 'gpt-4o', auth: 'Bearer ' + settings.apiKey};

@@ -17,26 +17,15 @@
     </div>
     <div class="header-actions">
       <div class="user-chip" id="user-chip"><img id="user-pic" alt=""><span id="user-name"></span></div>
+      <button class="chat-btn" id="open-chat" aria-label="AI Chat"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
       <button class="settings-btn" id="open-settings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     </div>
   </div>
   <p class="sync-pill" id="sync-pill"><span class="sync-dot" id="sync-dot"></span><span id="sync-text">Local only</span></p>
 
-  <div class="summary">
-    <div class="avail-block">
-      <div><p class="avail-label">Available funds now</p><p class="avail-value" id="avail-value">—</p></div>
-      <p class="avail-hint">Loan received + own cash − everything spent</p>
-    </div>
-    <div class="stat-grid">
-      <div><p class="stat-label"><span class="stat-dot" style="background:var(--loan)"></span>Loan received</p><p class="stat-value" id="stat-loan" style="color:var(--loan)">—</p></div>
-      <div><p class="stat-label"><span class="stat-dot" style="background:var(--ink-2)"></span>Own cash</p><p class="stat-value" id="stat-cash">—</p></div>
-      <div><p class="stat-label"><span class="stat-dot" style="background:var(--spend)"></span>Spent</p><p class="stat-value" id="stat-spent" style="color:var(--spend)">—</p></div>
-      <div><p class="stat-label"><span class="stat-dot" style="background:var(--accent)"></span>Pending</p><p class="stat-value" id="stat-pending">—</p></div>
-    </div>
-  </div>
-
   <div class="tabs" id="tabs">
-    <button class="tab-btn active" data-tab="funds">Funds</button>
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="funds">Funds</button>
     <button class="tab-btn" data-tab="budget">Budget</button>
     <button class="tab-btn" data-tab="actions">Actions</button>
     <button class="tab-btn" data-tab="sellers">Sellers</button>
@@ -56,6 +45,12 @@
   <option value="Doors / Windows"><option value="Paint / Finishing"><option value="Kitchen">
   <option value="Bathroom"><option value="Labour"><option value="Permits / Fees"><option value="Other">
 </datalist>
+
+<div class="chat-panel" id="chat-panel">
+  <div class="chat-head"><p class="chat-title">AI Assistant</p><button class="chat-close" id="chat-close">&times;</button></div>
+  <div class="chat-messages" id="chat-messages"></div>
+  <div class="chat-input-row"><input id="chat-input" placeholder="Ask about your budget…" autocomplete="off"><button id="chat-send" class="chat-send-btn">Send</button></div>
+</div>
 
 <script type="module" src="js/app.js?v=20260818a"></script>
 </body>
