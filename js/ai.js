@@ -69,6 +69,58 @@ export function providerConfig() {
   throw new Error('Unknown provider');
 }
 
+function stripMarkdownFences(text) {
+  return String(text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+}
+
+function extractBalancedJson(text) {
+  const s = stripMarkdownFences(text);
+  const startObj = s.indexOf('{');
+  const startArr = s.indexOf('[');
+  let start = -1;
+  if (startObj >= 0 && startArr >= 0) start = Math.min(startObj, startArr);
+  else start = Math.max(startObj, startArr);
+  if (start < 0) return s;
+
+  const stack = [];
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' || ch === ']') {
+      if (!stack.length) continue;
+      const top = stack[stack.length - 1];
+      if ((ch === '}' && top === '{') || (ch === ']' && top === '[')) stack.pop();
+      if (!stack.length) return s.slice(start, i + 1);
+    }
+  }
+
+  // Response was likely truncated; close what is still open.
+  let repaired = s.slice(start).replace(/,\s*$/g, '');
+  for (let i = stack.length - 1; i >= 0; i--) repaired += stack[i] === '{' ? '}' : ']';
+  return repaired;
+}
+
+function parseVisionJson(text) {
+  const raw = stripMarkdownFences(text);
+  const candidate = extractBalancedJson(raw);
+  try { return JSON.parse(candidate); }
+  catch (e) {
+    const cleaned = candidate
+      .replace(/,\s*([}\]])/g, '$1')
+      .replace(/[\u0000-\u001F]+/g, ' ');
+    return JSON.parse(cleaned);
+  }
+}
+
 export async function callVisionOCR(dataUrl) {
   const cfg = providerConfig();
   const body = {
@@ -77,7 +129,7 @@ export async function callVisionOCR(dataUrl) {
       {type: 'text', text: OCR_PROMPT},
       {type: 'image_url', image_url: {url: dataUrl, detail: 'high'}}
     ]}],
-    max_tokens: 1800,
+    max_tokens: 2800,
     temperature: 0
   };
   const res = await fetch(cfg.url, {method: 'POST', headers: {'Content-Type': 'application/json', Authorization: cfg.auth}, body: JSON.stringify(body)});
@@ -87,12 +139,8 @@ export async function callVisionOCR(dataUrl) {
     throw new Error('API ' + res.status + (extra ? ': ' + String(extra).slice(0, 140) : ''));
   }
   const json = await res.json();
-  let txt = (json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) || '';
-  txt = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();
-  const m = txt.match(/\{[\s\S]*\}/) || txt.match(/\[[\s\S]*\]/);
-  if (m) txt = m[0];
-  try { return JSON.parse(txt); }
-  catch (e) { return JSON.parse(txt.replace(/,\s*([}\]])/g, '$1')); }
+  const txt = (json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) || '';
+  return parseVisionJson(txt);
 }
 
 export function providerOptionsHtml() {
