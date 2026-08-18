@@ -59,7 +59,7 @@ Add `https://epounaj.github.io` as an authorised origin.
 | --- | --- |
 | AI API key, provider, chosen model, model list, custom API URL | Your Drive: `Site Ledger/site-ledger-settings.json` (per Google account) |
 | Ledger CSV | Your Drive: `Site Ledger/site-ledger.csv` |
-| Full receipt photos | Your Drive: `Site Ledger/` |
+| Full receipt photos | Your Drive: `Site Ledger/Receipts/{category}/` |
 | Working copy on this phone | Browser IndexedDB for this site |
 
 Sign out clears the key from this browser. It stays in your Drive until you sign in again.
@@ -81,7 +81,7 @@ Settings → choose provider → paste key → Save (writes to your Drive profil
 
 If the API cannot list models (CORS or no `/v1/models` route), choose **Other…** and type the model name.
 
-Scan still runs from the browser to the provider. Double-check amounts before saving.
+Scan still runs from the browser to the provider. Camera and Gallery scan automatically. Double-check amounts before saving. Photos are filed as `My Drive → Site Ledger → Receipts → {category}`.
 
 ---
 
