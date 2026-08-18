@@ -1,14 +1,61 @@
-import {TITLES, CHIP} from './config.js?v=20260818i';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818i';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818i';
-import {hub} from './hub.js?v=20260818i';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818i';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818i';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818i';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818i';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818i';
+import {TITLES, CHIP} from './config.js?v=20260818j';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818j';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory, compressImage, extFromFile} from './util.js?v=20260818j';
+import {hub} from './hub.js?v=20260818j';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl, callVisionOCR} from './ai.js?v=20260818j';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm, normalizeOcr} from './receipts.js?v=20260818j';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818j';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818j';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818j';
 
 let sellerPendingPhotos = [];
+let sellerPendingLines = [];
+let sellerItemSearch = '';
+
+function sellerLinesTableHtml(lines) {
+  if (!Array.isArray(lines) || !lines.length) return '<p class="field-hint">No extracted line items yet.</p>';
+  return '<div class="receipt-table-wrap"><table class="receipt-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>' +
+    lines.map(l => '<tr><td>' + esc(l.item || '') + '</td><td>' + esc(l.qty || '') + '</td><td>' + money(l.rate || 0) + '</td><td>' + money(l.amount || 0) + '</td></tr>').join('') +
+    '</tbody></table></div>';
+}
+
+async function extractSellerLinesFromPending(overwrite) {
+  const status = $('m-seller-ocr-status');
+  if (!sellerPendingPhotos.length || !settings.apiKey) return;
+  const merged = [];
+  let firstSeller = '', firstCategory = '';
+  for (let i = 0; i < sellerPendingPhotos.length; i++) {
+    if (status) status.textContent = 'Reading seller image ' + (i + 1) + ' of ' + sellerPendingPhotos.length + '…';
+    const ph = sellerPendingPhotos[i];
+    try {
+      const raw = await callVisionOCR(ph.ocrDataUrl || ph.thumb || ph.url);
+      const data = normalizeOcr(raw);
+      if (!data) continue;
+      if (!firstSeller && data.seller) firstSeller = data.seller;
+      if (!firstCategory && data.category) firstCategory = data.category;
+      (data.lines || []).forEach(l => {
+        const item = String((l && l.item) || '').trim();
+        if (!item) return;
+        merged.push({
+          item,
+          qty: Number(l.qty) || 0,
+          rate: Number(l.rate) || 0,
+          amount: Number(l.amount) || 0
+        });
+      });
+    } catch (e) {}
+  }
+  if (merged.length && (overwrite || !sellerPendingLines.length)) sellerPendingLines = merged;
+  const itemEl = $('m-item');
+  if (itemEl && !itemEl.value.trim() && sellerPendingLines[0]) itemEl.value = sellerPendingLines[0].item || '';
+  const nameEl = $('m-name');
+  if (nameEl && !nameEl.value.trim() && firstSeller) nameEl.value = firstSeller;
+  const catEl = $('m-category');
+  if (catEl && !catEl.value.trim() && firstCategory) catEl.value = firstCategory;
+  const box = $('m-seller-lines');
+  if (box) box.innerHTML = sellerLinesTableHtml(sellerPendingLines);
+  if (status) status.textContent = sellerPendingLines.length ? ('Extracted ' + sellerPendingLines.length + ' line items from seller images.') : 'Could not extract line items. You can still save manually.';
+}
 
 function chip(status) {
   const map = CHIP || {};
@@ -262,6 +309,26 @@ function renderSellers() {
     return {item: x.item, category: x.category, best, worst, avg, samples: priced.length};
   }).filter(Boolean).sort((a, b) => (a.best.unit - b.best.unit)).slice(0, 80);
 
+  const quoteRows = [];
+  state.sellers.forEach(s => {
+    const lines = Array.isArray(s.quoteLines) ? s.quoteLines : [];
+    lines.forEach(l => quoteRows.push({
+      sellerId: s.id,
+      seller: s.name || '',
+      item: l.item || '',
+      qty: Number(l.qty) || 0,
+      rate: Number(l.rate) || 0,
+      amount: Number(l.amount) || 0,
+      status: s.status || ''
+    }));
+  });
+  const q = sellerItemSearch.trim().toLowerCase();
+  const filteredQuotes = q ? quoteRows.filter(r =>
+    String(r.item || '').toLowerCase().includes(q) ||
+    String(r.seller || '').toLowerCase().includes(q) ||
+    String(r.status || '').toLowerCase().includes(q)
+  ) : quoteRows;
+
   const items = state.sellers.map(s => '<div class="entry"><div class="entry-top"><div><p class="entry-name">' + esc(s.name) + '</p>' +
     (s.contact ? '<p class="entry-sub">' + esc(s.contact) + '</p>' : '') + '</div>' + chip(s.status) + '</div>' +
     (Array.isArray(s.photos) && s.photos.length ? ('<div class="photo-list" style="margin-top:8px">' + s.photos.slice(0, 6).map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-lightbox="' + s.id + ':' + i + '" alt="Seller photo">').join('') + '</div>') : '') +
@@ -278,6 +345,10 @@ function renderSellers() {
       '</tbody></table></div></div>')
     : '<div class="set-note">No comparable line-item prices yet. Add more screenshots/receipts with qty and amount to unlock best-price ranking.</div>';
   return head('Seller shortlist', 'Compare suppliers and contractor quotes. Auto-rank best item prices from your purchase screenshots.', 'sellers') +
+    '<div class="purchase-toolbar"><input class="seller-search-field seller-item-search" placeholder="Search seller items fast…" value="' + esc(sellerItemSearch) + '"></div>' +
+    '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Item</th><th>Seller</th><th>Qty</th><th>Rate</th><th>Amount</th><th>Status</th></tr></thead><tbody>' +
+    (filteredQuotes.length ? filteredQuotes.map(r => '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.seller) + '</td><td>' + esc(r.qty || '') + '</td><td>' + money(r.rate || 0) + '</td><td>' + money(r.amount || 0) + '</td><td>' + chip(r.status) + '</td></tr>').join('') : '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--ink-2)">No extracted seller items yet. Upload seller screenshots/photos to build this table.</td></tr>') +
+    '</tbody></table></div>' +
     bestTable +
     (state.sellers.length ? '<div class="entry-list">' + items + '</div>' : empty('No sellers shortlisted yet', 'Add suppliers with their quoted price and status.'));
 }
@@ -420,6 +491,10 @@ function attach() {
     $('lightbox-img').src = ph.url || ph.thumb || '';
     $('lightbox').classList.add('show');
   });
+  const sellerSearchEl = root.querySelector('.seller-item-search');
+  if (sellerSearchEl) {
+    sellerSearchEl.oninput = e => { sellerItemSearch = e.target.value; render(); };
+  }
   const searchEl = root.querySelector('.purchase-search');
   if (searchEl) {
     searchEl.oninput = e => { purchaseSearch = e.target.value; render(); };
@@ -476,6 +551,7 @@ function formBody(kind, p) {
   if (kind === 'sellers') {
     p = p || {name: '', contact: '', item: '', price: '', status: 'shortlisted', notes: '', photos: [], photoLinks: []};
     const curPhotos = sellerPendingPhotos.length ? sellerPendingPhotos : (Array.isArray(p.photos) ? p.photos : []);
+    const curLines = sellerPendingLines.length ? sellerPendingLines : (Array.isArray(p.quoteLines) ? p.quoteLines : []);
     return '<div class="form-grid">' +
       '<div class="field wide"><label class="req">Name</label><input id="m-name" value="' + esc(p.name) + '" placeholder="e.g. ABC Hardware" autocomplete="off"></div>' +
       '<div class="field"><label>For</label><input list="category-options" id="m-item" value="' + esc(p.item) + '" placeholder="e.g. Roof tiles"></div>' +
@@ -490,6 +566,7 @@ function formBody(kind, p) {
       '<div class="photo-actions"><label class="photo-btn">Add photos<input type="file" accept="image/*" multiple id="m-seller-photo" style="display:none"></label></div>' +
       '<div class="photo-list" id="m-seller-photo-list">' + curPhotos.map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-modal-photo="' + i + '" alt="Seller photo ' + (i + 1) + '">').join('') + '</div>' +
       '<button type="button" class="photo-remove" id="m-seller-photo-remove" style="' + (curPhotos.length ? '' : 'display:none') + '">Remove all seller photos</button></div>' +
+      '<div class="field wide"><label>Extracted line items</label><p class="field-hint" id="m-seller-ocr-status">' + (curLines.length ? ('Loaded ' + curLines.length + ' extracted lines.') : 'Add seller screenshots/photos to auto-extract items.') + '</p><div id="m-seller-lines">' + sellerLinesTableHtml(curLines) + '</div></div>' +
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div></div>';
   }
   if (kind === 'purchases') {
@@ -537,6 +614,7 @@ export function openModal(kind, rec) {
   session.photoCleared = false;
   clearPendingPhoto();
   sellerPendingPhotos = [];
+  sellerPendingLines = (kind === 'sellers' && rec && Array.isArray(rec.quoteLines)) ? rec.quoteLines.slice() : [];
   const title = (rec ? TITLES[kind][1] : TITLES[kind][0]);
   const sub = {
     funds: 'How much came in, and from where.',
@@ -568,6 +646,7 @@ export function closeModal() {
   clearPendingPhoto();
   sellerPendingPhotos.forEach(ph => { if (ph && ph.url && ph.url.startsWith('blob:')) try { URL.revokeObjectURL(ph.url); } catch (e) {} });
   sellerPendingPhotos = [];
+  sellerPendingLines = [];
 }
 
 function bindModal() {
@@ -609,14 +688,16 @@ function bindModal() {
     if (!fs.length) return;
     for (const f of fs) {
       const thumb = await compressImage(f, 360, 0.6);
+      const ocrDataUrl = await compressImage(f, 2000, 0.85).catch(() => thumb);
       let url = '';
       try { url = URL.createObjectURL(f); } catch (err) {}
-      sellerPendingPhotos.push({file: f, ext: extFromFile(f), thumb: thumb || url, url: url || thumb});
+      sellerPendingPhotos.push({file: f, ext: extFromFile(f), thumb: thumb || url, url: url || thumb, ocrDataUrl: ocrDataUrl || thumb || url});
     }
     const list = $('m-seller-photo-list');
     if (list) list.innerHTML = sellerPendingPhotos.map((ph, i) => '<img src="' + esc(ph.thumb || ph.url || '') + '" data-seller-modal-photo="' + i + '" alt="Seller photo ' + (i + 1) + '">').join('');
     const rm = $('m-seller-photo-remove');
     if (rm) rm.style.display = sellerPendingPhotos.length ? '' : 'none';
+    if (settings.apiKey) await extractSellerLinesFromPending(false);
     e.target.value = '';
   });
   const rmSeller = $('m-seller-photo-remove');
@@ -660,6 +741,7 @@ async function saveModal() {
     const pr = val('m-price');
     if (pr !== '' && (!finiteNum(pr) || +pr < 0)) return showErr('Enter a valid quoted price, or leave it blank.');
     obj = {name: n, contact: val('m-contact').trim(), item: val('m-item').trim(), price: pr === '' ? '' : +pr, status: val('m-status'), notes: val('m-notes').trim()};
+    obj.quoteLines = sellerPendingLines.length ? sellerPendingLines.slice() : (session.editing && Array.isArray(session.editing.quoteLines) ? session.editing.quoteLines.slice() : []);
     if (sellerPendingPhotos.length) {
       obj.photos = sellerPendingPhotos.map(ph => ({thumb: ph.thumb, url: ph.url}));
       if (settings.driveToken) {

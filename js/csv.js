@@ -1,7 +1,7 @@
-import {uid} from './util.js?v=20260818i';
-import {state, persist, replaceLedger} from './store.js?v=20260818i';
-import {hub} from './hub.js?v=20260818i';
-import {toast, todayStr} from './util.js?v=20260818i';
+import {uid} from './util.js?v=20260818j';
+import {state, persist, replaceLedger} from './store.js?v=20260818j';
+import {hub} from './hub.js?v=20260818j';
+import {toast, todayStr} from './util.js?v=20260818j';
 
 function csvCell(v) {
   if (v == null) return '';
@@ -40,8 +40,9 @@ export function toCSV() {
   push('actions', state.actions, ['id', 'title', 'due', 'status', 'notes']);
   push('sellers', state.sellers.map(s => Object.assign({}, s, {
     photos: Array.isArray(s.photos) ? JSON.stringify(s.photos) : (s.photos || ''),
-    photoLinks: Array.isArray(s.photoLinks) ? JSON.stringify(s.photoLinks) : (s.photoLinks || '')
-  })), ['id', 'name', 'contact', 'item', 'price', 'status', 'notes', 'photos', 'photoLinks']);
+    photoLinks: Array.isArray(s.photoLinks) ? JSON.stringify(s.photoLinks) : (s.photoLinks || ''),
+    quoteLines: Array.isArray(s.quoteLines) ? JSON.stringify(s.quoteLines) : (s.quoteLines || '')
+  })), ['id', 'name', 'contact', 'item', 'price', 'status', 'notes', 'photos', 'photoLinks', 'quoteLines']);
   push('purchases', state.purchases.map(p => Object.assign({}, p, {
     lines: Array.isArray(p.lines) ? JSON.stringify(p.lines) : (p.lines || ''),
     driveFileIds: Array.isArray(p.driveFileIds) ? JSON.stringify(p.driveFileIds) : (p.driveFileIds || ''),
@@ -70,6 +71,9 @@ export function fromCSV(text) {
     }
     if (o.photoLinks && typeof o.photoLinks === 'string' && o.photoLinks.trim().startsWith('[')) {
       try { o.photoLinks = JSON.parse(o.photoLinks); } catch (e) {}
+    }
+    if (o.quoteLines && typeof o.quoteLines === 'string' && o.quoteLines.trim().startsWith('[')) {
+      try { o.quoteLines = JSON.parse(o.quoteLines); } catch (e) {}
     }
     if (o.driveFileIds && typeof o.driveFileIds === 'string' && o.driveFileIds.trim().startsWith('[')) {
       try { o.driveFileIds = JSON.parse(o.driveFileIds); } catch (e) {}
