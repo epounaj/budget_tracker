@@ -1,10 +1,10 @@
-import {settings, session} from './store.js?v=20260818u';
-import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame} from './util.js?v=20260818u';
-import {CATEGORIES} from './config.js?v=20260818u';
-import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260818u';
-import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260818u';
+import {settings, session} from './store.js?v=20260818v';
+import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame} from './util.js?v=20260818v';
+import {CATEGORIES} from './config.js?v=20260818v';
+import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260818v';
+import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260818v';
 
-export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260818u';
+export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260818v';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');

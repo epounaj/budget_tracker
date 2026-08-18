@@ -1,8 +1,8 @@
-import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818u';
-import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, ledgerRecordCount, snapshotLedger, mergeLedgers, LEDGER_STORES, clearSavedToken} from './store.js?v=20260818u';
-import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage, driveFolderName} from './util.js?v=20260818u';
-import {toCSV, fromCSV} from './csv.js?v=20260818u';
-import {hub} from './hub.js?v=20260818u';
+import {GOOGLE_CLIENT_ID, PROFILE_FILE, CSV_FILE} from './config.js?v=20260818v';
+import {settings, state, saveSettings, applyAi, persist, snapshotAi, replaceLedger, session, ledgerEmpty, ledgerRecordCount, snapshotLedger, mergeLedgers, LEDGER_STORES, clearSavedToken} from './store.js?v=20260818v';
+import {$, toast, todayStr, folderSafe, driveQueryName, normalizeCategory, dataURLtoBlob, extFromFile, compressImage, driveFolderName} from './util.js?v=20260818v';
+import {toCSV, fromCSV} from './csv.js?v=20260818v';
+import {hub} from './hub.js?v=20260818v';
 
 export function appClientId() {
   const inp = $('login-client-id');
@@ -367,36 +367,105 @@ export async function uploadSellerOriginalToDrive(fileOrBlob, info) {
 let csvSyncT;
 let syncInFlight = null;
 let syncRequested = false;
-export function scheduleCsvSync() {
-  clearTimeout(csvSyncT);
-  csvSyncT = setTimeout(() => { syncCsvToDrive().catch(() => {}); }, 1500);
+let syncRequestOpts = {};
+
+function uiBusy() {
+  return ['overlay', 'settings-overlay', 'lightbox', 'login-screen'].some(id => {
+    const el = $(id);
+    return el && el.classList.contains('show');
+  });
 }
-export async function syncCsvToDrive() {
-  if (!settings.driveToken) return;
+
+async function driveCsvIsNewer() {
+  const folderId = settings.driveFolderId;
+  if (!folderId) return true;
+  const meta = await csvMetaInFolder(folderId);
+  if (!meta) return true;
+  const driveMs = Date.parse(meta.modifiedTime) || 0;
+  const lastMs = Date.parse(settings.csvSyncedAt) || 0;
+  return driveMs > lastMs + 2000;
+}
+
+export async function runSync(opts) {
+  opts = opts || {};
+  if (!settings.driveToken) return 'offline';
   if (syncInFlight) {
     syncRequested = true;
+    syncRequestOpts = opts;
     return syncInFlight;
   }
-  session.syncStatus = 'syncing';
-  hub.updateSyncPill();
+  if (!opts.light) {
+    session.syncStatus = 'syncing';
+    hub.updateSyncPill();
+  }
   syncInFlight = (async () => {
     try {
-      await pushCsvToDrive(false);
-      session.syncStatus = 'idle';
-      hub.updateSyncPill();
+      if (opts.light && !settings.csvDirty) {
+        const newer = await driveCsvIsNewer();
+        if (!newer) {
+          if (session.syncHint === 'local') {
+            session.syncHint = 'drive';
+            hub.updateSyncPill();
+          }
+          return 'ok';
+        }
+        session.syncStatus = 'syncing';
+        hub.updateSyncPill();
+      }
+      return await reconcileLedgerWithDrive({quiet: !!opts.quiet});
     } catch (e) {
       session.syncStatus = 'error';
       hub.updateSyncPill();
-      toast(e.message || 'Drive sync failed');
+      if (!opts.quiet) toast(e.message || 'Drive sync failed');
+      throw e;
     } finally {
       syncInFlight = null;
       if (syncRequested) {
         syncRequested = false;
-        if (settings.csvDirty) scheduleCsvSync();
+        const next = syncRequestOpts;
+        syncRequestOpts = {};
+        runSync(next).catch(() => {});
       }
     }
   })();
   return syncInFlight;
+}
+
+export function scheduleCsvSync() {
+  clearTimeout(csvSyncT);
+  csvSyncT = setTimeout(() => { runSync({quiet: true}).catch(() => {}); }, 500);
+}
+
+export async function syncCsvToDrive() {
+  return runSync({quiet: false});
+}
+
+async function pullIfIdle() {
+  if (!settings.driveToken || !session.loggedIn) return;
+  if (uiBusy()) return;
+  if (session.syncStatus === 'syncing') return;
+  try { await runSync({quiet: true, light: true}); }
+  catch (e) {}
+}
+
+export function startLiveSync() {
+  if (startLiveSync._bound) return;
+  startLiveSync._bound = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') pullIfIdle();
+  });
+  window.addEventListener('focus', pullIfIdle);
+  window.addEventListener('online', pullIfIdle);
+  window.addEventListener('pageshow', pullIfIdle);
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    pullIfIdle();
+  }, 12000);
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startLiveSync);
+  else startLiveSync();
 }
 
 export function updateSyncPill() {
@@ -415,10 +484,10 @@ export function updateSyncPill() {
   else if (!settings.driveToken) text = 'Saved to this device only — tap to continue with Google';
   else if (session.syncHint === 'merged') text = email ? 'Merged with Drive · ' + email : 'Merged with Drive';
   else if (session.syncHint === 'local') text = 'Saved to this device only';
-  else text = email ? 'Loaded from Drive · ' + email : 'Loaded from Drive';
+  else text = email ? ('Drive · ' + email) : 'Synced with Google Drive';
   if (textEl) textEl.textContent = text;
   if (pill) {
-    pill.classList.toggle('tappable', !settings.driveToken || session.syncStatus === 'error');
+    pill.classList.toggle('tappable', session.syncStatus !== 'syncing');
     pill.classList.toggle('warn', !settings.driveToken || session.syncStatus === 'error' || session.syncHint === 'local');
   }
 }

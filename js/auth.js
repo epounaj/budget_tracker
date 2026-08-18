@@ -1,8 +1,8 @@
-import {LOGIN_SCOPE, G_ICON} from './config.js?v=20260818u';
-import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger, persistOauth, clearSavedToken, tokenIsFresh} from './store.js?v=20260818u';
-import {$, esc, toast} from './util.js?v=20260818u';
-import {hub} from './hub.js?v=20260818u';
-import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, reconcileLedgerWithDrive} from './drive.js?v=20260818u';
+import {LOGIN_SCOPE, G_ICON} from './config.js?v=20260818v';
+import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger, persistOauth, clearSavedToken, tokenIsFresh} from './store.js?v=20260818v';
+import {$, esc, toast} from './util.js?v=20260818v';
+import {hub} from './hub.js?v=20260818v';
+import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, reconcileLedgerWithDrive} from './drive.js?v=20260818v';
 
 export function secureContext() { return window.isSecureContext === true && location.protocol !== 'file:'; }
 export function loadGis() {
