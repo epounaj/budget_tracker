@@ -9,11 +9,11 @@
  *   ui.js        lists, sticky Save modal, settings
  *   csv.js       export/import
  */
-import {GOOGLE_CLIENT_ID} from './config.js';
-import {loadAll, settings, session, restoreSavedToken} from './store.js';
-import {renderLogin, loadGis, resumeSession} from './auth.js';
-import {bindShell} from './ui.js';
-import {appClientId} from './drive.js';
+import {GOOGLE_CLIENT_ID} from './config.js?v=20260818a';
+import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818a';
+import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818a';
+import {bindShell} from './ui.js?v=20260818a';
+import {appClientId} from './drive.js?v=20260818a';
 
 bindShell();
 

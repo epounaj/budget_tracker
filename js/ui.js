@@ -1,12 +1,12 @@
-import {TITLES, CHIP} from './config.js';
-import {state, settings, session, persist, saveSettings} from './store.js';
-import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js';
-import {hub} from './hub.js';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js';
-import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js';
-import {downloadCSV, importCSVFile} from './csv.js';
-import {googleLogout, startGoogleLogin} from './auth.js';
+import {TITLES, CHIP} from './config.js?v=20260818a';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818a';
+import {$, esc, money, todayStr, uid, finiteNum, toast, normalizeCategory} from './util.js?v=20260818a';
+import {hub} from './hub.js?v=20260818a';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818a';
+import {handlePhoto, maybeScanAfterPhoto, startReceiptScan, removePendingPhoto, openPhotoLightbox, clearPendingPhoto, purchaseLinesHtml, bindLineTable, readPurchaseForm} from './receipts.js?v=20260818a';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818a';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818a';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818a';
 
 function parsePurchaseLines(p) {
   if (!p) return [{item: '', qty: '', rate: '', amount: ''}];
