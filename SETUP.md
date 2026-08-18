@@ -1,8 +1,15 @@
 # Site Ledger — setup guide
 
-A single-file construction tracker. You **sign in with Google**. Your ledger backup and AI API keys are stored in **your** Google Drive (`Site Ledger` folder), not in this website or GitHub.
+A construction tracker. You **sign in with Google**. Your ledger backup and AI API keys are stored in **your** Google Drive (`Site Ledger` folder), not in this website or GitHub.
 
-Everything is in one file: `index.html`. Serve it over **https** or **localhost** (Google login will not work from `file://`).
+Everything is served as static files. `index.html` is the shell. Behaviour lives in `js/` so you can change OCR, Drive, or UI without rewriting the whole app:
+
+- `js/config.js` — categories, OAuth client, Drive file names
+- `js/ai.js` — receipt scan and model picker
+- `js/receipts.js` — camera/gallery, original photo, AI fill
+- `js/drive.js` — Google Drive folders and uploads
+- `js/ui.js` — screens and the Save bar
+
 
 ---
 
