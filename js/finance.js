@@ -1,6 +1,6 @@
 /** Plan vs spend: each payment is materials or labour (user can override on Paid tab). */
-import {state} from './store.js?v=20260819b';
-import {normalizeCategory, lineAmount, sumLines, purchaseCategories} from './util.js?v=20260819b';
+import {state} from './store.js?v=20260819c';
+import {normalizeCategory, lineAmount, sumLines, purchaseCategories, purchasePayee, isBankName} from './util.js?v=20260819c';
 
 export const PAY_METHODS = [
   {id: 'cash', label: 'Cash'},
@@ -40,11 +40,11 @@ export function allPayments() {
     out.push({
       id: p.id,
       source: 'purchases',
-      payee: String(p.seller || '').trim(),
+      payee: purchasePayee(p) || String(p.seller || '').trim(),
       label: p.item || 'Shop bill',
       category: (purchaseCategories(p)[0] || p.category || ''),
       date: p.date || '',
-      method: p.paymentMethod || '',
+      method: p.paymentMethod || (isBankName(p.seller) ? 'juice' : ''),
       amount,
       spendKind: defaultSpendKind(p, 'purchases'),
       thumb: p.thumb || '',

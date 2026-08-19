@@ -1,7 +1,7 @@
-import {uid} from './util.js?v=20260819b';
-import {state, persist, replaceLedger} from './store.js?v=20260819b';
-import {hub} from './hub.js?v=20260819b';
-import {toast, todayStr} from './util.js?v=20260819b';
+import {uid} from './util.js?v=20260819c';
+import {state, persist, replaceLedger} from './store.js?v=20260819c';
+import {hub} from './hub.js?v=20260819c';
+import {toast, todayStr} from './util.js?v=20260819c';
 
 function csvCell(v) {
   if (v == null) return '';
@@ -56,7 +56,7 @@ export function toCSV() {
     categories: Array.isArray(p.categories) ? JSON.stringify(p.categories) : (p.categories || ''),
     driveFileIds: Array.isArray(p.driveFileIds) ? JSON.stringify(p.driveFileIds) : (p.driveFileIds || ''),
     driveFiles: Array.isArray(p.driveFiles) ? JSON.stringify(p.driveFiles) : (p.driveFiles || '')
-  })), ['id', 'item', 'category', 'categories', 'seller', 'price', 'date', 'receipt', 'notes', 'paymentMethod', 'spendKind', 'lines', 'driveLink', 'driveFileId', 'driveFolder', 'driveFileIds', 'driveFiles', 'updatedAt']);
+  })), ['id', 'item', 'category', 'categories', 'seller', 'payee', 'price', 'date', 'receipt', 'notes', 'paymentMethod', 'spendKind', 'lines', 'driveLink', 'driveFileId', 'driveFolder', 'driveFileIds', 'driveFiles', 'updatedAt']);
   push('labour', (state.labour || []).map(p => Object.assign({}, p, {
     photos: Array.isArray(p.photos) ? JSON.stringify(p.photos) : (p.photos || ''),
     photoLinks: Array.isArray(p.photoLinks) ? JSON.stringify(p.photoLinks) : (p.photoLinks || '')

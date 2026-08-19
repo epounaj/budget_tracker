@@ -162,10 +162,9 @@ h1{font-size:20px;font-weight:700;margin:0;letter-spacing:-.03em;}
 .fund-cell .v.neg,.fund-cell .v.warn{color:var(--spend);}
 .fund-note{font-size:12px;color:var(--ink-2);margin:10px 0 0;line-height:1.45;}
 .kind-toggle{display:flex;gap:6px;flex-wrap:wrap;}
-.kind-check{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:6px 10px;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);cursor:pointer;user-select:none;white-space:nowrap;}
-.kind-check input{position:absolute;opacity:0;width:0;height:0;margin:0;}
-.kind-check.on.mat{border-color:#BCD8C8;background:var(--accent-soft);color:var(--accent-deep);}
-.kind-check.on.lab{border-color:#E8C4A8;background:#FFF4E8;color:#9A5B00;}
+.kind-btn{font-family:inherit;font-size:11px;font-weight:600;padding:6px 10px;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);cursor:pointer;color:var(--ink-2);white-space:nowrap;}
+.kind-btn.on.mat{border-color:#BCD8C8;background:var(--accent-soft);color:var(--accent-deep);}
+.kind-btn.on.lab{border-color:#E8C4A8;background:#FFF4E8;color:#9A5B00;}
 .kind-cell{min-width:168px;}
 .paid-stats,.labour-stats,.budget-stats{margin-bottom:14px;}
 .page-summary,.labour-summary,.budget-summary{margin-bottom:6px;}

@@ -1,4 +1,4 @@
-import {CATEGORIES, CUR} from './config.js?v=20260819b';
+import {CATEGORIES, CUR} from './config.js?v=20260819c';
 
 export const $ = id => document.getElementById(id);
 export const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -248,4 +248,34 @@ export function extFromFile(file) {
   if (t === 'image/webp') return 'webp';
   if (t === 'image/heic' || t === 'image/heif') return 'heic';
   return 'jpg';
+}
+
+/** MCB / Juice are payment channels, not who received the money. */
+export function isBankName(name) {
+  const s = String(name || '').trim();
+  if (!s) return false;
+  return /^(mcb(\s+ltd\.?)?|mauritius commercial bank|juice(\s*\(mcb\))?|my\.?mcb(\.mu)?)$/i.test(s)
+    || /^mcb\b/i.test(s);
+}
+
+export function purchasePayee(p) {
+  if (!p) return '';
+  const explicit = String(p.payee || '').trim();
+  if (explicit) return explicit;
+  const seller = String(p.seller || '').trim();
+  if (seller && !isBankName(seller)) return seller;
+  const lines = Array.isArray(p.lines) ? p.lines : [];
+  for (const l of lines) {
+    const it = String((l && l.item) || '').trim();
+    if (it && !isBankName(it) && it.length > 2) return it;
+  }
+  const item = String(p.item || '').trim();
+  if (item && !isBankName(item)) {
+    const cleaned = item.replace(/^(inv[-\s#]?[\d\w./+-]+[\s:+\-–]*)/i, '').trim();
+    if (cleaned && !isBankName(cleaned) && cleaned.length > 2) return cleaned;
+    if (item.length > 2) return item;
+  }
+  const notes = String(p.notes || '').trim();
+  if (notes && !isBankName(notes)) return notes;
+  return seller || '';
 }

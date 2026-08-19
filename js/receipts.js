@@ -1,10 +1,10 @@
-import {settings, session} from './store.js?v=20260819b';
-import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame} from './util.js?v=20260819b';
-import {CATEGORIES} from './config.js?v=20260819b';
-import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260819b';
-import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260819b';
+import {settings, session} from './store.js?v=20260819c';
+import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame, isBankName} from './util.js?v=20260819c';
+import {CATEGORIES} from './config.js?v=20260819c';
+import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260819c';
+import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260819c';
 
-export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260819b';
+export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260819c';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -313,9 +313,18 @@ export function applyOcrFields(raw, overwrite) {
     return false;
   };
   const filled = [];
-  if (set('m-seller', data.seller)) filled.push('seller');
+  const payee = inferPayeeFromOcr(data);
+  if (set('m-payee', payee)) filled.push('paid to');
+  if (set('m-seller', data.seller)) filled.push('receipt from');
   if (set('m-name', data.seller)) filled.push('name');
   if (set('m-contact', data.contact)) filled.push('contact');
+  if (isBankName(data.seller)) {
+    const mEl = $('m-method');
+    if (mEl && (overwrite || !String(mEl.value || '').trim())) {
+      mEl.value = /juice/i.test(String(data.seller)) ? 'juice' : 'card';
+      filled.push('paid via');
+    }
+  }
   if (data.date) {
     const dEl = $('m-date');
     if (dEl && (overwrite || !String(dEl.value || '').trim())) { dEl.value = data.date; filled.push('date'); }
@@ -637,6 +646,7 @@ export function readSellerQuoteGroups(defaults) {
 
 export function readPurchaseForm() {
   const lines = readLinesFromTable();
+  const payee = ($('m-payee') && $('m-payee').value.trim()) || '';
   const seller = ($('m-seller') && $('m-seller').value.trim()) || '';
   const date = ($('m-date') && $('m-date').value) || '';
   const receipt = ($('m-receipt') && $('m-receipt').value.trim()) || '';
@@ -644,6 +654,18 @@ export function readPurchaseForm() {
   const category = categories[0] || '';
   const lineSum = sumLines(lines);
   let price = lineSum || parseMoney($('m-price') && $('m-price').value);
-  const item = (($('m-item') && $('m-item').value.trim()) || summarizePurchase(seller, lines)).trim();
-  return {lines, seller, date, receipt, category, categories, price, item};
+  const item = (($('m-item') && $('m-item').value.trim()) || summarizePurchase(payee || seller, lines)).trim();
+  return {lines, seller, payee, date, receipt, category, categories, price, item};
+}
+
+function inferPayeeFromOcr(data) {
+  const seller = String(data.seller || '').trim();
+  if (seller && !isBankName(seller)) return seller;
+  for (const l of data.lines || []) {
+    const it = String(l.item || '').trim();
+    if (it && !isBankName(it) && it.length > 2) return it;
+  }
+  const item = String(data.item || '').trim();
+  if (item && !isBankName(item)) return item.replace(/^(inv[-\s#]?[\d\w./+-]+[\s:+\-–]*)/i, '').trim() || item;
+  return '';
 }

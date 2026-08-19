@@ -1,21 +1,21 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819b';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260819b';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260819b';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819b';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819c';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260819c';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName} from './util.js?v=20260819c';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819c';
 import {
   PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
   totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
   extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows,
   allPayments, labourPayments, labourBudgetPlanned, labourByTrade, labourByPayee, defaultSpendKind,
   materialsSpent, labourSpent
-} from './finance.js?v=20260819b';
-import {hub} from './hub.js?v=20260819b';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819b';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819b';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819b';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819b';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260819b';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260819b';
+} from './finance.js?v=20260819c';
+import {hub} from './hub.js?v=20260819c';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819c';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819c';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819c';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819c';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260819c';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260819c';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -345,11 +345,11 @@ function renderBudget() {
 }
 
 function kindToggleHtml(source, id, kind) {
-  const matOn = kind === 'materials' ? ' on' : '';
-  const labOn = kind === 'labour' ? ' on' : '';
+  const sid = esc(source);
+  const iid = esc(id);
   return '<div class="kind-toggle" role="group" aria-label="Materials or labour">' +
-    '<label class="kind-check' + matOn + '"><input type="checkbox" data-kind-set="materials" data-source="' + source + '" data-id="' + id + '"' + (kind === 'materials' ? ' checked' : '') + '><span>Materials</span></label>' +
-    '<label class="kind-check' + labOn + '"><input type="checkbox" data-kind-set="labour" data-source="' + source + '" data-id="' + id + '"' + (kind === 'labour' ? ' checked' : '') + '><span>Labour</span></label></div>';
+    '<button type="button" class="kind-btn mat' + (kind === 'materials' ? ' on' : '') + '" data-kind-set="materials" data-source="' + sid + '" data-id="' + iid + '">Materials</button>' +
+    '<button type="button" class="kind-btn lab' + (kind === 'labour' ? ' on' : '') + '" data-kind-set="labour" data-source="' + sid + '" data-id="' + iid + '">Labour</button></div>';
 }
 
 function chartBarHtml(rows, opts) {
@@ -472,14 +472,14 @@ function renderPaid() {
   const tableRows = filtered.map(p => paymentTableRow(p)).join('') ||
     '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink-2)">No matches</td></tr>';
 
-  return '<div class="panel-head"><div><p class="panel-title">Paid to</p><p class="panel-desc">Every payment out. Tick <strong>Materials</strong> (shops) or <strong>Labour</strong> (contractors) — budgets update immediately.</p></div></div>' +
+  return '<div class="panel-head"><div><p class="panel-title">Paid to</p><p class="panel-desc">Who received the money — not the bank (MCB/Juice). Tap <strong>Materials</strong> or <strong>Labour</strong> to classify.</p></div></div>' +
     '<div class="insights-grid paid-stats">' +
     '<div class="insight-card"><p class="k">Total paid</p><p class="v">' + money(matTotal + labTotal) + '</p></div>' +
     '<div class="insight-card"><p class="k">Materials</p><p class="v">' + money(matTotal) + '</p></div>' +
     '<div class="insight-card"><p class="k">Labour</p><p class="v bad">' + money(labTotal) + '</p></div>' +
     '<div class="insight-card"><p class="k">Payments</p><p class="v">' + all.length + '</p></div></div>' +
     '<div class="purchase-toolbar">' +
-    '<input class="purchase-search paid-search" placeholder="Search payee or description…" value="' + esc(paidSearch) + '">' +
+    '<input class="paid-search" placeholder="Search payee or description…" value="' + esc(paidSearch) + '">' +
     '<div class="seller-cat-pills paid-kind-pills">' + kindPills + '</div></div>' +
     '<div class="purchase-table-wrap"><table class="purchase-table paid-table"><thead><tr>' +
     '<th>Date</th><th>Paid to</th><th>What</th><th>Trade</th><th>Kind</th><th>Method</th><th class="num">Amount</th><th>Actions</th>' +
@@ -956,16 +956,16 @@ function attach() {
   const paidSearchEl = root.querySelector('.paid-search');
   if (paidSearchEl) {
     paidSearchEl.oninput = e => { paidSearch = e.target.value; render(); };
-    if (paidSearch) {
+    if (session.activeTab === 'paid' && paidSearch) {
       const pos = paidSearchEl.value.length;
       paidSearchEl.focus();
       paidSearchEl.setSelectionRange(pos, pos);
     }
   }
-  const searchEl = root.querySelector('.purchase-search');
+  const searchEl = session.activeTab === 'purchases' ? root.querySelector('.purchase-search') : null;
   if (searchEl) {
     searchEl.oninput = e => { purchaseSearch = e.target.value; render(); };
-    if (document.activeElement === null || purchaseSearch) {
+    if (purchaseSearch) {
       const pos = searchEl.value.length;
       searchEl.focus();
       searchEl.setSelectionRange(pos, pos);
@@ -1106,10 +1106,11 @@ function formBody(kind, p) {
       extraHtml: hasKey ? '' : inlineAiHtml()
     }) +
       '<div class="receipt-meta">' +
-      '<div class="field"><label>Seller</label><input id="m-seller" value="' + esc(p.seller) + '" placeholder="Shop / company" autocomplete="off"></div>' +
+      '<div class="field"><label class="req">Paid to</label><input id="m-payee" value="' + esc(p.payee || purchasePayee(p) || p.seller || '') + '" placeholder="Who received the money" autocomplete="off"></div>' +
+      '<div class="field"><label>Receipt from</label><input id="m-seller" value="' + esc(p.seller || '') + '" placeholder="Shop on receipt (optional)" autocomplete="off"></div>' +
       '<div class="field"><label>Date</label><input type="date" id="m-date" value="' + esc(p.date || todayStr()) + '"></div>' +
       '<div class="field"><label>Receipt no.</label><input id="m-receipt" value="' + esc(p.receipt) + '" placeholder="Optional"></div>' +
-      '<div class="field"><label>Paid by</label>' + methodSelectHtml('m-method', p.paymentMethod) + '</div></div>' +
+      '<div class="field"><label>Paid via</label>' + methodSelectHtml('m-method', p.paymentMethod || (isBankName(p.seller) ? 'juice' : '')) + '</div></div>' +
       '<div class="field wide"><label>Categories</label>' +
       categoryPillsHtml(purchaseCategories(p)) +
       '<p class="field-hint">Tap all that apply. AI also tags each line — change a line if it guessed wrong.</p>' +
@@ -1275,30 +1276,25 @@ function sellerRecordFromGroup(g, shared) {
 }
 
 function readSpendKindFromForm(fallback) {
-  const lab = document.querySelector('[data-kind-set="labour"]');
-  const mat = document.querySelector('[data-kind-set="materials"]');
-  if (lab && lab.checked) return 'labour';
-  if (mat && mat.checked) return 'materials';
+  const on = document.querySelector('.kind-toggle .kind-btn.on[data-kind-set]');
+  if (on) return on.dataset.kindSet;
   return fallback || 'materials';
 }
 
 function bindKindToggles(root, persistOnChange) {
   if (!root) return;
-  root.querySelectorAll('[data-kind-set]').forEach(inp => {
-    inp.onchange = async () => {
-      const kind = inp.dataset.kindSet;
-      const group = inp.closest('.kind-toggle');
+  root.querySelectorAll('.kind-toggle [data-kind-set]').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const kind = btn.dataset.kindSet;
+      const group = btn.closest('.kind-toggle');
       if (group) {
-        group.querySelectorAll('[data-kind-set]').forEach(other => {
-          const on = other.dataset.kindSet === kind;
-          other.checked = on;
-          const lbl = other.closest('.kind-check');
-          if (lbl) lbl.classList.toggle('on', on);
-        });
+        group.querySelectorAll('[data-kind-set]').forEach(b => b.classList.toggle('on', b === btn));
       }
       if (!persistOnChange) return;
-      const source = inp.dataset.source;
-      const id = inp.dataset.id;
+      const source = btn.dataset.source;
+      const id = btn.dataset.id;
       if (!source || !id || id === 'new') return;
       const rec = (state[source] || []).find(x => x.id === id);
       if (!rec) return;
@@ -1429,6 +1425,7 @@ async function saveModal() {
       category: cats[0] || '',
       categories: cats,
       seller: form.seller,
+      payee: val('m-payee').trim() || form.payee || form.seller,
       price: +form.price,
       date: form.date || todayStr(),
       receipt: form.receipt,
