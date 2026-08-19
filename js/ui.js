@@ -1,21 +1,21 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819f';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260819f';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819f';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819f';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819g';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260819g';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819g';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819g';
 import {
   PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
   totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
   extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows,
   allPayments, labourPayments, labourBudgetPlanned, labourByTrade, labourByPayee, defaultSpendKind,
   materialsSpent, labourSpent
-} from './finance.js?v=20260819f';
-import {hub} from './hub.js?v=20260819f';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819f';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819f';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819f';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819f';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260819f';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260819f';
+} from './finance.js?v=20260819g';
+import {hub} from './hub.js?v=20260819g';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819g';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819g';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819g';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819g';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260819g';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260819g';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -1053,11 +1053,26 @@ function renderPurchaseDetail(p) {
   if (p.notes) html += '<dt>Notes</dt><dd>' + esc(p.notes) + '</dd>';
   html += '</dl>';
   if (Array.isArray(p.lines) && p.lines.length) {
-    html += '<table class="detail-lines"><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th><th>Category</th></tr></thead><tbody>';
+    const receipt = p.receipt ? '#' + p.receipt : '—';
+    const date = p.date || '—';
+    const via = p.paymentMethod ? payMethodLabel(p.paymentMethod) : '—';
+    html += '<table class="detail-lines"><thead><tr>' +
+      '<th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th>' +
+      '<th>Category</th><th>Receipt</th><th>Date</th><th>Via</th>' +
+      '</tr></thead><tbody>';
     p.lines.forEach(l => {
-      html += '<tr><td>' + esc(l.item || '') + '</td><td class="num">' + esc(l.qty || '') + '</td><td class="num">' + fmtNum(l.rate) + '</td><td class="num tight">' + moneyDec(lineAmount(l)) + '</td><td>' + (l.category ? '<span class="chip cat">' + esc(normalizeCategory(l.category)) + '</span>' : '—') + '</td></tr>';
+      html += '<tr>' +
+        '<td>' + esc(l.item || '') + '</td>' +
+        '<td class="num">' + esc(l.qty || '') + '</td>' +
+        '<td class="num">' + fmtNum(l.rate) + '</td>' +
+        '<td class="num tight">' + moneyDec(lineAmount(l)) + '</td>' +
+        '<td>' + (l.category ? '<span class="chip cat">' + esc(normalizeCategory(l.category)) + '</span>' : '—') + '</td>' +
+        '<td class="line-receipt">' + esc(receipt) + '</td>' +
+        '<td class="line-date">' + esc(date) + '</td>' +
+        '<td class="line-via">' + esc(via) + '</td>' +
+        '</tr>';
     });
-    html += '<tr class="detail-total"><td colspan="3">Total</td><td class="num tight">' + moneyDec(displayTotal) + '</td><td></td></tr>';
+    html += '<tr class="detail-total"><td colspan="4">Total</td><td class="num tight">' + moneyDec(displayTotal) + '</td><td colspan="3"></td></tr>';
     html += '</tbody></table>';
   }
   return html;

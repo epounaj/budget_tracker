@@ -1,4 +1,4 @@
-import {DB_NAME, DB_VERSION, STORES, TOKEN_KEY} from './config.js?v=20260819f';
+import {DB_NAME, DB_VERSION, STORES, TOKEN_KEY} from './config.js?v=20260819g';
 
 let db;
 export let state = {funds: [], budget: [], actions: [], sellers: [], purchases: [], labour: []};
