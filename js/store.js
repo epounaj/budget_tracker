@@ -1,7 +1,7 @@
-import {DB_NAME, STORES, TOKEN_KEY} from './config.js?v=20260818w';
+import {DB_NAME, DB_VERSION, STORES, TOKEN_KEY} from './config.js?v=20260818x';
 
 let db;
-export let state = {funds: [], budget: [], actions: [], sellers: [], purchases: []};
+export let state = {funds: [], budget: [], actions: [], sellers: [], purchases: [], labour: []};
 export let settings = {
   provider: 'openai', apiKey: '', model: '', apiBase: '', chatModel: '', models: [], profiles: {},
   driveClientId: '', driveToken: null, driveTokenExp: 0, driveFolderId: '', user: null, userSub: '', autoCsv: true,
@@ -18,7 +18,7 @@ export let session = {
   syncStatus: 'idle',
   syncHint: 'local'
 };
-export const LEDGER_STORES = ['funds', 'budget', 'actions', 'sellers', 'purchases'];
+export const LEDGER_STORES = ['funds', 'budget', 'actions', 'sellers', 'purchases', 'labour'];
 
 export function replaceLedger(next) {
   state.funds = next.funds || [];
@@ -26,10 +26,11 @@ export function replaceLedger(next) {
   state.actions = next.actions || [];
   state.sellers = next.sellers || [];
   state.purchases = next.purchases || [];
+  state.labour = next.labour || [];
 }
 
 export function emptyLedger() {
-  replaceLedger({funds: [], budget: [], actions: [], sellers: [], purchases: []});
+  replaceLedger({funds: [], budget: [], actions: [], sellers: [], purchases: [], labour: []});
 }
 
 export function snapshotLedger() {
@@ -83,7 +84,7 @@ export function mergeLedgers(preferred, other) {
 
 function openDB() {
   return new Promise((res, rej) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = e => {
       const d = e.target.result;
       STORES.forEach(s => { if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, {keyPath: s === 'meta' ? 'k' : 'id'}); });
@@ -118,7 +119,8 @@ function idbSetMeta(k, v) { return idbPut('meta', {k, v}); }
 
 export async function loadAll() {
   await openDB();
-  for (const s of ['funds', 'budget', 'actions', 'sellers', 'purchases']) state[s] = await idbAll(s);
+  for (const s of LEDGER_STORES) state[s] = await idbAll(s);
+  if (!Array.isArray(state.labour)) state.labour = [];
   const st = await idbGetMeta('settings');
   if (st) settings = Object.assign(settings, st);
 }
@@ -133,7 +135,7 @@ export async function persist(store, opts) {
     const t = db.transaction(store, 'readwrite');
     const os = t.objectStore(store);
     os.clear();
-    for (const row of state[store]) os.put(row);
+    for (const row of (state[store] || [])) os.put(row);
     t.oncomplete = () => res();
     t.onerror = () => rej(t.error);
   });

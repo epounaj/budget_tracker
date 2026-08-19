@@ -1,12 +1,13 @@
 /** App constants. Change categories, OAuth client, and file names here. */
-export const APP_VERSION = 'v1.1.22';  // bump this after each push
+export const APP_VERSION = 'v1.1.23';  // bump this after each push
 export const CUR = 'Rs ';
 export const GOOGLE_CLIENT_ID = '379149446558-pk7favl7g2hj1dugkhqog4kbb56aut0r.apps.googleusercontent.com';
 export const PROFILE_FILE = 'site-ledger-settings.json';
 export const CSV_FILE = 'site-ledger.csv';
 export const DB_NAME = 'siteledger';
 export const TOKEN_KEY = 'siteledger.oauth';
-export const STORES = ['funds', 'budget', 'actions', 'sellers', 'purchases', 'meta'];
+export const DB_VERSION = 2;
+export const STORES = ['funds', 'budget', 'actions', 'sellers', 'purchases', 'labour', 'meta'];
 export const LOGIN_SCOPE = 'openid email profile https://www.googleapis.com/auth/drive.file';
 export const CATEGORIES = [
   'Foundation', 'Structure / Masonry', 'Roofing', 'Electrical', 'Plumbing',
@@ -19,7 +20,8 @@ export const TITLES = {
   budget: ['Add budget', 'Edit budget'],
   actions: ['Add task', 'Edit task'],
   sellers: ['Add seller', 'Edit seller'],
-  purchases: ['Add purchase', 'Edit purchase']
+  purchases: ['Add purchase', 'Edit purchase'],
+  labour: ['Add labour payment', 'Edit labour payment']
 };
 export const CHIP = {
   pending: ['pending', 'Pending'], progress: ['progress', 'In progress'], done: ['done', 'Done'],

@@ -11,12 +11,12 @@
  *   catalog.js   sellers shop catalog, search, quote-from-list
  *   csv.js       export/import
  */
-import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818w';
-import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818w';
-import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818w';
-import {bindShell} from './ui.js?v=20260818w';
-import {initChat} from './chat.js?v=20260818w';
-import {appClientId} from './drive.js?v=20260818w';
+import {GOOGLE_CLIENT_ID, APP_VERSION} from './config.js?v=20260818x';
+import {loadAll, settings, session, restoreSavedToken} from './store.js?v=20260818x';
+import {renderLogin, loadGis, resumeSession} from './auth.js?v=20260818x';
+import {bindShell} from './ui.js?v=20260818x';
+import {initChat} from './chat.js?v=20260818x';
+import {appClientId} from './drive.js?v=20260818x';
 
 try { bindShell(); } catch (e) { console.error(e); }
 try { initChat(); } catch (e) { console.error(e); }

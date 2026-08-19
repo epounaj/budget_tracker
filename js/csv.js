@@ -1,7 +1,7 @@
-import {uid} from './util.js?v=20260818w';
-import {state, persist, replaceLedger} from './store.js?v=20260818w';
-import {hub} from './hub.js?v=20260818w';
-import {toast, todayStr} from './util.js?v=20260818w';
+import {uid} from './util.js?v=20260818x';
+import {state, persist, replaceLedger} from './store.js?v=20260818x';
+import {hub} from './hub.js?v=20260818x';
+import {toast, todayStr} from './util.js?v=20260818x';
 
 function csvCell(v) {
   if (v == null) return '';
@@ -36,7 +36,15 @@ export function toCSV() {
     lines.push('');
   };
   push('funds', state.funds, ['id', 'type', 'label', 'amount', 'date', 'notes', 'updatedAt']);
-  push('budget', state.budget, ['id', 'category', 'budgeted', 'notes', 'updatedAt']);
+  push('budget', state.budget.map(b => {
+    const mat = (b.budgetedMaterials != null && b.budgetedMaterials !== '') ? +b.budgetedMaterials || 0 : +b.budgeted || 0;
+    const lab = +b.budgetedLabour || 0;
+    return Object.assign({}, b, {
+      budgeted: mat + lab,
+      budgetedMaterials: mat,
+      budgetedLabour: lab
+    });
+  }), ['id', 'category', 'budgeted', 'budgetedMaterials', 'budgetedLabour', 'notes', 'updatedAt']);
   push('actions', state.actions, ['id', 'title', 'due', 'status', 'notes', 'updatedAt']);
   push('sellers', state.sellers.map(s => Object.assign({}, s, {
     photos: Array.isArray(s.photos) ? JSON.stringify(s.photos) : (s.photos || ''),
@@ -48,14 +56,18 @@ export function toCSV() {
     categories: Array.isArray(p.categories) ? JSON.stringify(p.categories) : (p.categories || ''),
     driveFileIds: Array.isArray(p.driveFileIds) ? JSON.stringify(p.driveFileIds) : (p.driveFileIds || ''),
     driveFiles: Array.isArray(p.driveFiles) ? JSON.stringify(p.driveFiles) : (p.driveFiles || '')
-  })), ['id', 'item', 'category', 'categories', 'seller', 'price', 'date', 'receipt', 'notes', 'lines', 'driveLink', 'driveFileId', 'driveFolder', 'driveFileIds', 'driveFiles', 'updatedAt']);
+  })), ['id', 'item', 'category', 'categories', 'seller', 'price', 'date', 'receipt', 'notes', 'paymentMethod', 'lines', 'driveLink', 'driveFileId', 'driveFolder', 'driveFileIds', 'driveFiles', 'updatedAt']);
+  push('labour', (state.labour || []).map(p => Object.assign({}, p, {
+    photos: Array.isArray(p.photos) ? JSON.stringify(p.photos) : (p.photos || ''),
+    photoLinks: Array.isArray(p.photoLinks) ? JSON.stringify(p.photoLinks) : (p.photoLinks || '')
+  })), ['id', 'payee', 'category', 'amount', 'date', 'method', 'notes', 'photos', 'photoLinks', 'thumb', 'driveLink', 'driveFileId', 'updatedAt']);
   return lines.join('\n');
 }
 
 export function fromCSV(text) {
   const lines = text.split(/\r?\n/);
   let section = null, cols = null;
-  const fresh = {funds: [], budget: [], actions: [], sellers: [], purchases: []};
+  const fresh = {funds: [], budget: [], actions: [], sellers: [], purchases: [], labour: []};
   for (const raw of lines) {
     if (!raw.trim()) { cols = null; continue; }
     if (raw[0] === '#') { section = raw.slice(1).trim(); cols = null; continue; }
@@ -63,7 +75,7 @@ export function fromCSV(text) {
     if (!cols) { cols = parseCSVLine(raw); continue; }
     const vals = parseCSVLine(raw), o = {};
     cols.forEach((c, i) => o[c] = vals[i] !== undefined ? vals[i] : '');
-    ['amount', 'budgeted', 'price'].forEach(n => { if (o[n] !== undefined && o[n] !== '') o[n] = +o[n]; });
+    ['amount', 'budgeted', 'budgetedMaterials', 'budgetedLabour', 'price'].forEach(n => { if (o[n] !== undefined && o[n] !== '') o[n] = +o[n]; });
     if (o.lines && typeof o.lines === 'string' && o.lines.trim().startsWith('[')) {
       try { o.lines = JSON.parse(o.lines); } catch (e) {}
     }
@@ -86,6 +98,11 @@ export function fromCSV(text) {
       try { o.categories = JSON.parse(o.categories); } catch (e) {}
     }
     if (!o.id) o.id = uid();
+    if (section === 'budget') {
+      if (o.budgetedMaterials == null || o.budgetedMaterials === '') o.budgetedMaterials = +o.budgeted || 0;
+      if (o.budgetedLabour == null || o.budgetedLabour === '') o.budgetedLabour = 0;
+      o.budgeted = (+o.budgetedMaterials || 0) + (+o.budgetedLabour || 0);
+    }
     fresh[section].push(o);
   }
   return fresh;
@@ -107,7 +124,7 @@ export async function importCSVFile(file) {
   const fresh = fromCSV(text);
   if (!confirm('Import will REPLACE all current data with the CSV contents. Continue?')) return;
   replaceLedger(fresh);
-  for (const s of ['funds', 'budget', 'actions', 'sellers', 'purchases']) await persist(s);
+  for (const s of ['funds', 'budget', 'actions', 'sellers', 'purchases', 'labour']) await persist(s);
   hub.render();
   if (hub.scheduleCsvSync) hub.scheduleCsvSync();
   toast('CSV imported');

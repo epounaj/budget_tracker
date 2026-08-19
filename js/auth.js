@@ -1,8 +1,8 @@
-import {LOGIN_SCOPE, G_ICON} from './config.js?v=20260818w';
-import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger, persistOauth, clearSavedToken, tokenIsFresh} from './store.js?v=20260818w';
-import {$, esc, toast} from './util.js?v=20260818w';
-import {hub} from './hub.js?v=20260818w';
-import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, reconcileLedgerWithDrive} from './drive.js?v=20260818w';
+import {LOGIN_SCOPE, G_ICON} from './config.js?v=20260818x';
+import {settings, session, saveSettings, persist, stashAi, applyStashedAi, emptyLedger, persistOauth, clearSavedToken, tokenIsFresh} from './store.js?v=20260818x';
+import {$, esc, toast} from './util.js?v=20260818x';
+import {hub} from './hub.js?v=20260818x';
+import {appClientId, ensureDriveFolder, loadProfileFromDrive, saveProfileToDrive, reconcileLedgerWithDrive} from './drive.js?v=20260818x';
 
 export function secureContext() { return window.isSecureContext === true && location.protocol !== 'file:'; }
 export function loadGis() {
@@ -130,7 +130,7 @@ async function completeLogin(token, quiet, expiresIn) {
     emptyLedger();
     settings.csvSyncedAt = '';
     settings.csvDirty = false;
-    for (const s of ['funds', 'budget', 'actions', 'sellers', 'purchases']) await persist(s, {fromSync: true});
+    for (const s of ['funds', 'budget', 'actions', 'sellers', 'purchases', 'labour']) await persist(s, {fromSync: true});
   }
   applyStashedAi(u.sub);
   settings.user = {email: u.email, name: u.name, picture: u.picture};

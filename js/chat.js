@@ -1,15 +1,15 @@
-import {settings, state} from './store.js?v=20260818w';
-import {$, esc, money, toast, lineAmount, sumLines} from './util.js?v=20260818w';
-import {CUR, CATEGORIES} from './config.js?v=20260818w';
-import {hub} from './hub.js?v=20260818w';
-import {chatConfig} from './ai.js?v=20260818w';
+import {settings, state} from './store.js?v=20260818x';
+import {$, esc, money, toast, lineAmount} from './util.js?v=20260818x';
+import {CUR} from './config.js?v=20260818x';
+import {hub} from './hub.js?v=20260818x';
+import {chatConfig} from './ai.js?v=20260818x';
+import {
+  purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn, totalSpent, inHand,
+  extraNeeded, overdrawn, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan,
+  spentMaterialsForCat, spentLabourForCat, totalPlan
+} from './finance.js?v=20260818x';
 
 let history = [];
-
-function purchaseTotal(p) {
-  const ls = sumLines(p && p.lines);
-  return ls || +p.price || 0;
-}
 
 function buildItemPriceSnapshot(limit) {
   const out = [];
@@ -67,29 +67,37 @@ function localItemPriceAnswer(msg) {
 }
 
 function buildSystemPrompt() {
-  const loan = state.funds.filter(f => f.type === 'loan').reduce((s, f) => s + (+f.amount || 0), 0);
-  const cash = state.funds.filter(f => f.type === 'cash').reduce((s, f) => s + (+f.amount || 0), 0);
-  const total = loan + cash;
-  const spent = state.purchases.reduce((s, p) => s + purchaseTotal(p), 0);
-  const avail = total - spent;
+  const loan = loanReceived(), cash = ownCash(), fin = fundsIn();
+  const spent = totalSpent(), avail = inHand(), extra = extraNeeded(), over = overdrawn(), plan = totalPlan();
 
   const catSpend = {};
-  state.purchases.forEach(p => {
+  (state.budget || []).forEach(b => {
+    const c = b.category || 'Uncategorized';
+    catSpend[c] = spentMaterialsForCat(c) + spentLabourForCat(c);
+  });
+  (state.purchases || []).forEach(p => {
     const c = (p.category || 'Uncategorized').trim();
-    catSpend[c] = (catSpend[c] || 0) + purchaseTotal(p);
+    if (catSpend[c] == null) catSpend[c] = spentMaterialsForCat(c) + spentLabourForCat(c);
+  });
+  (state.labour || []).forEach(p => {
+    const c = (p.category || 'Uncategorized').trim();
+    if (catSpend[c] == null) catSpend[c] = spentMaterialsForCat(c) + spentLabourForCat(c);
   });
   const catBreakdown = Object.entries(catSpend).sort((a, b) => b[1] - a[1])
     .map(([c, a]) => `  ${c}: ${CUR}${a.toLocaleString()}`).join('\n');
 
-  const budgetStatus = state.budget.map(b => {
-    const bud = +b.budgeted || 0;
-    const sp = state.purchases.filter(p => (p.category || '').toLowerCase() === (b.category || '').toLowerCase())
-      .reduce((s, p) => s + purchaseTotal(p), 0);
-    return `  ${b.category}: budgeted ${CUR}${bud.toLocaleString()}, spent ${CUR}${sp.toLocaleString()}, remaining ${CUR}${(bud - sp).toLocaleString()}`;
+  const budgetStatus = (state.budget || []).map(b => {
+    const matP = budgetMaterialsPlanned(b), labP = budgetLabourPlanned(b);
+    const matS = spentMaterialsForCat(b.category), labS = spentLabourForCat(b.category);
+    const bud = budgetPlan(b), sp = matS + labS;
+    return `  ${b.category}: plan ${CUR}${bud.toLocaleString()} (materials ${CUR}${matP.toLocaleString()} / labour ${CUR}${labP.toLocaleString()}), spent ${CUR}${sp.toLocaleString()} (materials ${CUR}${matS.toLocaleString()} / labour ${CUR}${labS.toLocaleString()}), remaining ${CUR}${(bud - sp).toLocaleString()}`;
   }).join('\n');
 
-  const recent = [...state.purchases].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10)
-    .map(p => `  ${p.date || '?'} | ${p.seller || '?'} | ${p.item || '?'} | ${CUR}${purchaseTotal(p).toLocaleString()} | ${p.category || ''}`).join('\n');
+  const recent = [...(state.purchases || [])].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10)
+    .map(p => `  ${p.date || '?'} | ${p.seller || '?'} | ${p.item || '?'} | ${CUR}${purchaseTotal(p).toLocaleString()} | ${p.category || ''} | ${p.paymentMethod || ''}`).join('\n');
+
+  const recentLabour = [...(state.labour || [])].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10)
+    .map(p => `  ${p.date || '?'} | ${p.payee || '?'} | ${p.category || ''} | ${CUR}${labourTotal(p).toLocaleString()} | ${p.method || ''}`).join('\n');
 
   const lineHistory = buildItemPriceSnapshot(250)
     .map(r => `  ${r.date || '?'} | ${r.seller || '?'} | ${r.item} | amount ${CUR}${(Number(r.amount) || 0).toLocaleString()}${r.rate ? (' | rate ' + CUR + Number(r.rate).toLocaleString()) : ''}${r.qty ? (' | qty ' + Number(r.qty).toLocaleString()) : ''}`)
@@ -107,23 +115,29 @@ function buildSystemPrompt() {
   const pendingActions = state.actions.filter(a => a.status !== 'done')
     .map(a => `  ${a.title}${a.due ? ' (due ' + a.due + ')' : ''} [${a.status}]`).join('\n');
 
-  return `You are a construction budget assistant for Site Ledger. Answer based on the data below. Be concise. Use Rs for currency. If asked about prices, compare from purchase history.
+  return `You are a construction budget assistant for Site Ledger. Answer based on the data below. Be concise. Use Rs for currency. If asked about prices, compare from purchase history. Shop bills are materials; contractor payments are labour. Extra needed is max(0, plan − funds in).
 
 FUNDS:
   Loan received: ${CUR}${loan.toLocaleString()}
   Own cash: ${CUR}${cash.toLocaleString()}
-  Total available: ${CUR}${total.toLocaleString()}
-  Total spent: ${CUR}${spent.toLocaleString()}
-  Remaining: ${CUR}${avail.toLocaleString()}
+  Funds in: ${CUR}${fin.toLocaleString()}
+  Plan (materials + labour): ${CUR}${plan.toLocaleString()}
+  Total spent (purchases + labour): ${CUR}${spent.toLocaleString()}
+  In hand: ${CUR}${avail.toLocaleString()}
+  Extra needed: ${CUR}${extra.toLocaleString()}
+  Already overdrawn: ${CUR}${over.toLocaleString()}
 
-SPENDING BY CATEGORY:
+SPENDING BY TRADE:
 ${catBreakdown || '  (none)'}
 
 BUDGET STATUS:
 ${budgetStatus || '  (no budget set)'}
 
-RECENT PURCHASES (last 10):
+RECENT PURCHASES (last 10, materials):
 ${recent || '  (none)'}
+
+RECENT LABOUR PAYMENTS (last 10):
+${recentLabour || '  (none)'}
 
 SELLERS:
 ${sellers || '  (none)'}

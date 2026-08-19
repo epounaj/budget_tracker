@@ -1,7 +1,7 @@
 /** Shared photo album + lightbox. Thumbs stay small; lightbox always prefers a full image. */
-import {settings, session, state} from './store.js?v=20260818w';
-import {$, esc, compressImage, extFromFile} from './util.js?v=20260818w';
-import {driveFetch} from './drive.js?v=20260818w';
+import {settings, session, state} from './store.js?v=20260818x';
+import {$, esc, compressImage, extFromFile} from './util.js?v=20260818x';
+import {driveFetch} from './drive.js?v=20260818x';
 
 export const THUMB_MAX = 720;
 export const THUMB_Q = 0.82;
@@ -179,6 +179,33 @@ function photoFromEl(im) {
       link: im.dataset.driveLink || ''
     };
   }
+  if (kind === 'labour') {
+    const s = (state.labour || []).find(x => x.id === im.dataset.id);
+    if (!s || !Array.isArray(s.photos)) {
+      if (s && (s.thumb || s.driveFileId)) {
+        return {
+          photo: {thumb: s.thumb, driveFileId: s.driveFileId, webViewLink: s.driveLink},
+          cap: s.payee || 'Labour proof',
+          link: s.driveLink || ''
+        };
+      }
+      return null;
+    }
+    const ph = s.photos[idx] || {};
+    const ln = (Array.isArray(s.photoLinks) && s.photoLinks[idx]) || {};
+    return {
+      photo: {
+        thumb: ph.thumb,
+        url: ph.url,
+        previewUrl: ph.previewUrl,
+        ocrDataUrl: ph.ocrDataUrl,
+        driveFileId: ph.driveFileId || ln.id || s.driveFileId || '',
+        webViewLink: ph.webViewLink || ln.webViewLink || s.driveLink || ''
+      },
+      cap: s.payee || 'Labour proof',
+      link: ph.webViewLink || ln.webViewLink || s.driveLink || ''
+    };
+  }
   return null;
 }
 
@@ -236,18 +263,24 @@ export async function handlePhoto(file, append) {
   if (!file) return;
   if (!append) clearPendingPhoto();
   session.photoCleared = false;
+  const isPdf = (file.type && file.type === 'application/pdf') || /\.pdf$/i.test(file.name || '');
   let previewUrl = '';
   try { previewUrl = URL.createObjectURL(file); } catch (e) {}
   let thumbDataUrl = '', ocrDataUrl = '';
-  try { thumbDataUrl = await compressImage(file, THUMB_MAX, THUMB_Q); } catch (e) {}
-  try { ocrDataUrl = await compressImage(file, OCR_MAX, OCR_Q); } catch (e) {}
+  const pdfThumb = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect fill="#D9F3E6" width="80" height="80" rx="12"/><text x="40" y="46" text-anchor="middle" font-size="14" font-family="sans-serif" fill="#0B7A55">PDF</text></svg>');
+  if (isPdf) {
+    thumbDataUrl = pdfThumb;
+  } else {
+    try { thumbDataUrl = await compressImage(file, THUMB_MAX, THUMB_Q); } catch (e) {}
+    try { ocrDataUrl = await compressImage(file, OCR_MAX, OCR_Q); } catch (e) {}
+  }
   const nextPhoto = {
     originalFile: file,
     previewUrl,
     thumbDataUrl: thumbDataUrl || previewUrl,
     thumb: thumbDataUrl || previewUrl,
     ocrDataUrl: ocrDataUrl || previewUrl || thumbDataUrl,
-    ext: extFromFile(file)
+    ext: isPdf ? 'pdf' : extFromFile(file)
   };
   if (!session.pending || !Array.isArray(session.pending.photos)) session.pending = {photos: []};
   session.pending.photos.push(nextPhoto);
@@ -273,8 +306,8 @@ export function albumListHtml(photos, opts) {
     let attrs = ' data-preview="album" data-idx="' + i + '"';
     if (!pending.length && opts.kind === 'purchase' && opts.recordId) {
       attrs = ' data-preview="purchase" data-id="' + esc(opts.recordId) + '"';
-    } else if (!pending.length && opts.kind === 'seller' && opts.recordId) {
-      attrs = ' data-preview="seller" data-id="' + esc(opts.recordId) + '" data-idx="' + i + '"';
+    } else if (!pending.length && opts.kind === 'labour' && opts.recordId) {
+      attrs = ' data-preview="labour" data-id="' + esc(opts.recordId) + '" data-idx="' + i + '"';
     }
     if (ph.driveFileId) attrs += ' data-drive-id="' + esc(ph.driveFileId) + '"';
     if (ph.webViewLink) attrs += ' data-drive-link="' + esc(ph.webViewLink) + '"';
@@ -286,12 +319,15 @@ export function existingFormPhotos(rec, kind) {
   const pending = pendingPhotos();
   if (pending.length) return pending;
   if (session.photoCleared || !rec) return [];
-  if (kind === 'sellers') {
+  if (kind === 'sellers' || kind === 'labour') {
     const links = Array.isArray(rec.photoLinks) ? rec.photoLinks : [];
-    return (Array.isArray(rec.photos) ? rec.photos : []).map((ph, i) => Object.assign({}, ph, {
-      driveFileId: ph.driveFileId || (links[i] && links[i].id) || '',
-      webViewLink: ph.webViewLink || (links[i] && links[i].webViewLink) || ''
-    }));
+    const photos = Array.isArray(rec.photos) ? rec.photos : [];
+    if (photos.length) {
+      return photos.map((ph, i) => Object.assign({}, ph, {
+        driveFileId: ph.driveFileId || (links[i] && links[i].id) || rec.driveFileId || '',
+        webViewLink: ph.webViewLink || (links[i] && links[i].webViewLink) || rec.driveLink || ''
+      }));
+    }
   }
   if (rec.thumb || rec.driveFileId) {
     return [{
@@ -308,6 +344,8 @@ export function photoFieldHtml(opts) {
   opts = opts || {};
   const photos = opts.photos || [];
   const has = photos.length > 0;
+  const skipOcr = !!opts.skipOcr;
+  const accept = opts.accept || 'image/*';
   const ocrLabel = opts.ocrLabel || (opts.hasKey ? 'Re-scan with AI' : 'Extract with AI');
   const hint = opts.hint || 'For multi-page receipts, add all photos first. AI reads every page into one table.';
   return '<div class="photo-field" style="margin-bottom:14px">' +
@@ -315,11 +353,11 @@ export function photoFieldHtml(opts) {
     '<label class="photo-btn">' + CAM_SVG + 'Camera' +
     '<input type="file" accept="image/*" capture="environment" id="m-photo-cam" style="display:none"></label>' +
     '<label class="photo-btn">' + GAL_SVG + 'Gallery' +
-    '<input type="file" accept="image/*" multiple id="m-photo" style="display:none"></label></div>' +
+    '<input type="file" accept="' + accept + '" multiple id="m-photo" style="display:none"></label></div>' +
     '<p class="field-hint">' + hint + '</p>' +
     (opts.extraHtml || '') +
-    '<button type="button" class="ocr-btn" id="m-ocr" style="margin-top:10px">' + OCR_SVG + ocrLabel + '</button>' +
-    '<div class="ocr-status" id="m-ocr-status"></div>' +
+    (skipOcr ? '' : ('<button type="button" class="ocr-btn" id="m-ocr" style="margin-top:10px">' + OCR_SVG + ocrLabel + '</button>' +
+    '<div class="ocr-status" id="m-ocr-status"></div>')) +
     '<div class="photo-preview' + (has ? ' show' : '') + '" id="m-photo-preview">' +
     '<div class="photo-list" id="m-photo-list">' + albumListHtml(photos, opts) + '</div>' +
     '<div class="photo-preview-meta"><p class="field-hint" id="m-photo-meta">' +
@@ -340,7 +378,7 @@ export function bindAlbumControls(root, afterAdd) {
   const prm = $('m-photo-remove'); if (prm) prm.onclick = removePendingPhoto;
   if (!root || (!pin && !cam)) return;
   root.onpaste = async e => {
-    if (session.editKind !== 'purchases' && session.editKind !== 'sellers') return;
+    if (session.editKind !== 'purchases' && session.editKind !== 'sellers' && session.editKind !== 'labour') return;
     const items = [...((e.clipboardData && e.clipboardData.items) || [])];
     const files = items.filter(it => it.type && it.type.startsWith('image/')).map(it => it.getAsFile()).filter(Boolean);
     if (!files.length) return;

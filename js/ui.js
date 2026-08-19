@@ -1,14 +1,19 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260818w';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818w';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260818w';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260818w';
-import {hub} from './hub.js?v=20260818w';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818w';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260818w';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260818w';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818w';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818w';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818w';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260818x';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260818x';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260818x';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260818x';
+import {
+  PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
+  totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
+  extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows
+} from './finance.js?v=20260818x';
+import {hub} from './hub.js?v=20260818x';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818x';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260818x';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260818x';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818x';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260818x';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260818x';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -72,29 +77,8 @@ function parsePurchaseLines(p) {
   return mapped;
 }
 
-function loanReceived() { return state.funds.filter(f => f.type === 'loan').reduce((s, f) => s + (+f.amount || 0), 0); }
-function ownCash() { return state.funds.filter(f => f.type === 'cash').reduce((s, f) => s + (+f.amount || 0), 0); }
-function purchaseTotal(p) {
-  const ls = sumLines(p && p.lines);
-  return ls || +p.price || 0;
-}
-function totalSpent() { return state.purchases.reduce((s, p) => s + purchaseTotal(p), 0); }
-function spentForCat(c) {
-  const key = String(c || '').toLowerCase();
-  return state.purchases.reduce((s, p) => {
-    const lines = Array.isArray(p.lines) ? p.lines : [];
-    const tagged = lines.filter(l => normalizeCategory(l.category));
-    if (tagged.length) return s + tagged.filter(l => normalizeCategory(l.category).toLowerCase() === key).reduce((a, l) => a + lineAmount(l), 0);
-    const cats = purchaseCategories(p);
-    if (!cats.length) return s;
-    if (cats.length === 1 && cats[0].toLowerCase() === key) return s + purchaseTotal(p);
-    if (cats.some(x => x.toLowerCase() === key)) return s + purchaseTotal(p) / cats.length;
-    return s;
-  }, 0);
-}
-
 function computeSummary() {
-  const loan = loanReceived(), cash = ownCash(), spent = totalSpent(), avail = loan + cash - spent;
+  const loan = loanReceived(), cash = ownCash(), spent = totalSpent(), avail = inHand();
   const av = $('avail-value');
   if (av) { av.textContent = money(avail); av.classList.toggle('negative', avail < 0); }
   const sl = $('stat-loan'); if (sl) sl.textContent = money(loan);
@@ -109,15 +93,57 @@ function head(title, desc, kind) {
 }
 function empty(b, s) { return '<div class="empty-state"><p class="big">' + b + '</p><p class="small">' + s + '</p></div>'; }
 
-function renderDashboard() {
-  const loan = loanReceived(), cash = ownCash(), spent = totalSpent(), avail = loan + cash - spent;
-  const total = loan + cash;
+function methodSelectHtml(id, selected) {
+  const sel = PAY_METHODS.some(m => m.id === selected) ? selected : 'cash';
+  return '<select id="' + id + '">' +
+    PAY_METHODS.map(m => '<option value="' + m.id + '"' + (sel === m.id ? ' selected' : '') + '>' + m.label + '</option>').join('') +
+    '</select>';
+}
 
-  // Summary cards
+function envelopeHtml(label, planned, spent) {
+  const remain = planned - spent;
+  const w = planned > 0 ? Math.min(100, spent / planned * 100) : (spent > 0 ? 100 : 0);
+  const over = spent > planned;
+  return '<div class="envelope">' +
+    '<div class="envelope-row"><span>' + label + (over ? ' <span class="over-badge">OVER</span>' : '') + '</span><span>Spent <strong>' + money(spent) + '</strong> of ' + money(planned) +
+    ' · <strong style="color:' + (remain < 0 ? 'var(--spend)' : 'var(--accent)') + '">' + money(remain) + '</strong> left</span></div>' +
+    '<div class="bar"><span class="' + (over ? 'over' : '') + '" style="width:' + w + '%"></span></div></div>';
+}
+
+function financeStripHtml() {
+  const plan = totalPlan(), fin = fundsIn(), spent = totalSpent(), hand = inHand(), extra = extraNeeded(), over = overdrawn();
+  return '<div class="fund-strip">' +
+    '<div class="fund-grid">' +
+    '<div class="fund-cell"><p class="k">Plan</p><p class="v">' + money(plan) + '</p></div>' +
+    '<div class="fund-cell"><p class="k">Funds in</p><p class="v">' + money(fin) + '</p></div>' +
+    '<div class="fund-cell"><p class="k">Spent</p><p class="v spend">' + money(spent) + '</p></div>' +
+    '<div class="fund-cell"><p class="k">In hand</p><p class="v' + (hand < 0 ? ' neg' : '') + '">' + money(hand) + '</p></div>' +
+    '<div class="fund-cell"><p class="k">Extra needed</p><p class="v' + (extra > 0 ? ' warn' : '') + '">' + money(extra) + '</p></div>' +
+    '</div>' +
+    (over > 0 ? '<p class="fund-note">Already overdrawn ' + money(over) + ' — spent more than funds in.</p>' : '<p class="fund-note">Extra needed is how much more capital the plan still requires (plan − funds in).</p>') +
+    '</div>';
+}
+
+function spendInRange(from, to) {
+  const inWin = rec => {
+    const t = rec.date ? new Date(rec.date).getTime() : 0;
+    return t >= from && t <= to;
+  };
+  const shop = (state.purchases || []).filter(inWin).reduce((s, p) => s + purchaseTotal(p), 0);
+  const lab = (state.labour || []).filter(inWin).reduce((s, p) => s + labourTotal(p), 0);
+  return shop + lab;
+}
+
+function renderDashboard() {
+  const loan = loanReceived(), cash = ownCash(), spent = totalSpent(), avail = inHand();
+  const plan = totalPlan(), extra = extraNeeded(), over = overdrawn();
+  const remainPlan = Math.max(0, plan - spent);
+
   let html = '<div class="summary">' +
-    '<div class="avail-block"><div><p class="avail-label">Available funds now</p>' +
+    '<div class="avail-block"><div><p class="avail-label">In hand now</p>' +
     '<p class="avail-value' + (avail < 0 ? ' negative' : '') + '" id="avail-value">' + money(avail) + '</p></div>' +
-    '<p class="avail-hint">Loan received + own cash − everything spent</p></div>' +
+    '<p class="avail-hint">Funds in − shop bills − labour payments</p></div>' +
+    financeStripHtml() +
     '<div class="stat-grid">' +
     '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--loan)"></span>Loan received</p><p class="stat-value" id="stat-loan" style="color:var(--loan)">' + money(loan) + '</p></div>' +
     '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--ink-2)"></span>Own cash</p><p class="stat-value" id="stat-cash">' + money(cash) + '</p></div>' +
@@ -125,55 +151,48 @@ function renderDashboard() {
     '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--accent)"></span>Pending</p><p class="stat-value" id="stat-pending">' + state.actions.filter(a => a.status !== 'done').length + '</p></div>' +
     '</div></div>';
 
-  // Smart insights
   const now = Date.now();
   const d30 = now - 30 * 86400000;
   const d60 = now - 60 * 86400000;
-  const spend30 = state.purchases.filter(p => {
-    const t = p.date ? new Date(p.date).getTime() : 0;
-    return t >= d30 && t <= now;
-  }).reduce((s, p) => s + purchaseTotal(p), 0);
-  const spendPrev30 = state.purchases.filter(p => {
-    const t = p.date ? new Date(p.date).getTime() : 0;
-    return t >= d60 && t < d30;
-  }).reduce((s, p) => s + purchaseTotal(p), 0);
+  const spend30 = spendInRange(d30, now);
+  const spendPrev30 = spendInRange(d60, d30 - 1);
   const trendPct = spendPrev30 > 0 ? ((spend30 - spendPrev30) / spendPrev30) * 100 : 0;
-  const topCat = Object.entries(state.purchases.reduce((acc, p) => {
-    const c = (p.category || 'Uncategorized').trim();
-    acc[c] = (acc[c] || 0) + purchaseTotal(p);
-    return acc;
-  }, {})).sort((a, b) => b[1] - a[1])[0];
-  const topSeller = Object.entries(state.purchases.reduce((acc, p) => {
-    const s = (p.seller || '').trim();
-    if (!s) return acc;
-    acc[s] = (acc[s] || 0) + purchaseTotal(p);
-    return acc;
-  }, {})).sort((a, b) => b[1] - a[1])[0];
+  const catTotals = {};
+  (state.budget || []).forEach(b => {
+    const c = b.category || 'Uncategorized';
+    catTotals[c] = (catTotals[c] || 0) + spentMaterialsForCat(c) + spentLabourForCat(c);
+  });
+  (state.purchases || []).forEach(p => purchaseCategories(p).forEach(c => {
+    if (catTotals[c] == null) catTotals[c] = spentMaterialsForCat(c) + spentLabourForCat(c);
+  }));
+  (state.labour || []).forEach(p => {
+    const c = p.category || 'Uncategorized';
+    if (catTotals[c] == null) catTotals[c] = spentMaterialsForCat(c) + spentLabourForCat(c);
+  });
+  const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
+  const payees = paidToRows();
+  const topPayee = payees[0];
   html += '<div class="dash-section"><p class="dash-title">Smart insights</p><div class="insights-grid">' +
     '<div class="insight-card"><p class="k">30d spend</p><p class="v">' + money(spend30) + '</p></div>' +
     '<div class="insight-card"><p class="k">30d trend</p><p class="v ' + (trendPct > 0 ? 'bad' : 'good') + '">' + (spendPrev30 ? ((trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '%') : '—') + '</p></div>' +
-    '<div class="insight-card"><p class="k">Top category</p><p class="v">' + esc(topCat ? topCat[0] : '—') + '</p><p class="s">' + money(topCat ? topCat[1] : 0) + '</p></div>' +
-    '<div class="insight-card"><p class="k">Top seller</p><p class="v">' + esc(topSeller ? topSeller[0] : '—') + '</p><p class="s">' + money(topSeller ? topSeller[1] : 0) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Top trade</p><p class="v">' + esc(topCat ? topCat[0] : '—') + '</p><p class="s">' + money(topCat ? topCat[1] : 0) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Top payee</p><p class="v">' + esc(topPayee ? topPayee.name : '—') + '</p><p class="s">' + money(topPayee ? topPayee.total : 0) + '</p></div>' +
     '</div></div>';
 
-  // Loan disbursement alerts
   html += '<div class="dash-section"><p class="dash-title">Fund health</p>';
-  if (spent > 0) {
-    const ratio = avail / spent;
-    if (ratio > 0.3) html += '<div class="alert-card green"><p class="alert-title">Funds healthy</p><p class="alert-body">Available funds are above 30% of total spent.</p></div>';
-    else if (ratio >= 0.1) html += '<div class="alert-card yellow"><p class="alert-title">Running low — request next tranche soon</p><p class="alert-body">Available funds are between 10–30% of total spent.</p></div>';
-    else html += '<div class="alert-card red"><p class="alert-title">Funds critical — request disbursement now</p><p class="alert-body">Available funds are below 10% of total spent.</p></div>';
+  if (over > 0) {
+    html += '<div class="alert-card red"><p class="alert-title">Overdrawn</p><p class="alert-body">Spent ' + money(over) + ' more than funds in. Add a loan tranche or own cash.</p></div>';
+  } else if (remainPlan > 0) {
+    const ratio = avail / remainPlan;
+    if (ratio > 0.3) html += '<div class="alert-card green"><p class="alert-title">Funds healthy</p><p class="alert-body">In hand covers more than 30% of the remaining plan.</p></div>';
+    else if (ratio >= 0.1) html += '<div class="alert-card yellow"><p class="alert-title">Running low — request next tranche soon</p><p class="alert-body">In hand is 10–30% of remaining plan (' + money(remainPlan) + ' left to spend).</p></div>';
+    else html += '<div class="alert-card red"><p class="alert-title">Funds critical — request disbursement now</p><p class="alert-body">In hand is below 10% of remaining plan. Extra needed: ' + money(extra) + '.</p></div>';
+  } else if (spent > 0) {
+    html += '<div class="alert-card green"><p class="alert-title">Plan covered</p><p class="alert-body">Spend is within the planned total. Extra needed: ' + money(extra) + '.</p></div>';
   } else {
     html += '<div class="alert-card green"><p class="alert-title">Funds healthy</p><p class="alert-body">No spending recorded yet.</p></div>';
   }
-  // Runway projection
-  const thirtyDaysAgo = now - 30 * 86400000;
-  const recentSpend = state.purchases.filter(p => {
-    const d = p.date ? new Date(p.date).getTime() : 0;
-    return d >= thirtyDaysAgo && d <= now;
-  }).reduce((s, p) => s + purchaseTotal(p), 0);
-  const days30 = Math.min(30, state.purchases.length ? 30 : 0);
-  const avgDaily = days30 > 0 ? recentSpend / 30 : 0;
+  const avgDaily = spend30 / 30;
   if (avgDaily > 0) {
     const runwayDays = Math.round(Math.max(0, avail) / avgDaily);
     const next30 = Math.round(avgDaily * 30);
@@ -184,50 +203,29 @@ function renderDashboard() {
   }
   html += '</div>';
 
-  // Budget vs Actual bars
   if (state.budget.length) {
     html += '<div class="dash-section"><p class="dash-title">Budget vs Actual</p><table class="dash-table"><thead><tr>' +
-      '<th>Category</th><th>Budgeted</th><th>Spent</th><th>Remaining</th><th></th></tr></thead><tbody>';
+      '<th>Trade</th><th>Materials</th><th>Labour</th><th>Plan</th><th>Spent</th><th>Remaining</th></tr></thead><tbody>';
     state.budget.forEach(b => {
-      const bud = +b.budgeted || 0, sp = spentForCat(b.category), rem = bud - sp;
-      const w = bud > 0 ? Math.min(100, sp / bud * 100) : 0;
-      const over = sp > bud;
-      html += '<tr><td>' + esc(b.category) + '</td><td class="dash-stat">' + money(bud) + '</td>' +
+      const matP = budgetMaterialsPlanned(b), labP = budgetLabourPlanned(b);
+      const matS = spentMaterialsForCat(b.category), labS = spentLabourForCat(b.category);
+      const bud = budgetPlan(b), sp = matS + labS, rem = bud - sp;
+      const overRow = rem < 0;
+      html += '<tr><td>' + esc(b.category) + '</td>' +
+        '<td class="dash-stat">' + money(matS) + ' / ' + money(matP) + '</td>' +
+        '<td class="dash-stat">' + money(labS) + ' / ' + money(labP) + '</td>' +
+        '<td class="dash-stat">' + money(bud) + '</td>' +
         '<td class="dash-stat">' + money(sp) + '</td>' +
-        '<td class="dash-stat" style="color:' + (rem < 0 ? 'var(--spend)' : 'var(--accent)') + '">' + money(rem) + '</td>' +
-        '<td>' + (over ? '<span class="over-badge">OVER BUDGET</span>' : '') + '</td></tr>' +
-        '<tr><td colspan="5" style="padding:0 6px 8px"><div class="bar"><span class="' + (over ? 'over' : '') + '" style="width:' + w + '%"></span></div></td></tr>';
+        '<td class="dash-stat" style="color:' + (rem < 0 ? 'var(--spend)' : 'var(--accent)') + '">' + money(rem) +
+        (overRow ? ' <span class="over-badge">OVER</span>' : '') + '</td></tr>';
     });
     html += '</tbody></table></div>';
   }
 
-  // Top sellers by spend
-  const sellerTotals = {};
-  state.purchases.forEach(p => {
-    const s = (p.seller || '').trim();
-    if (s) sellerTotals[s] = (sellerTotals[s] || 0) + purchaseTotal(p);
-  });
-  const topSellers = Object.entries(sellerTotals).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  if (topSellers.length) {
-    html += '<div class="dash-section"><p class="dash-title">Top sellers by spend</p><table class="dash-table"><thead><tr><th>Seller</th><th>Total</th></tr></thead><tbody>';
-    topSellers.forEach(([name, amt]) => {
-      html += '<tr><td>' + esc(name) + '</td><td class="dash-stat">' + money(amt) + '</td></tr>';
-    });
-    html += '</tbody></table></div>';
-  }
-
-  // Category breakdown
-  const catSet = new Set();
-  state.purchases.forEach(p => {
-    const cats = purchaseCategories(p);
-    if (cats.length) cats.forEach(c => catSet.add(c));
-    else catSet.add('Other');
-  });
-  const catList = [...catSet].map(c => [c, spentForCat(c)]).filter(row => row[1] > 0).sort((a, b) => b[1] - a[1]);
-  if (catList.length) {
-    html += '<div class="dash-section"><p class="dash-title">Category breakdown</p><table class="dash-table"><thead><tr><th>Category</th><th>Spent</th></tr></thead><tbody>';
-    catList.forEach(([cat, amt]) => {
-      html += '<tr><td>' + esc(cat) + '</td><td class="dash-stat">' + money(amt) + '</td></tr>';
+  if (payees.length) {
+    html += '<div class="dash-section"><p class="dash-title">Top payees</p><table class="dash-table"><thead><tr><th>Payee</th><th>Materials</th><th>Labour</th><th>Total</th></tr></thead><tbody>';
+    payees.slice(0, 5).forEach(row => {
+      html += '<tr><td>' + esc(row.name) + '</td><td class="dash-stat">' + money(row.materials) + '</td><td class="dash-stat">' + money(row.labour) + '</td><td class="dash-stat">' + money(row.total) + '</td></tr>';
     });
     html += '</tbody></table></div>';
   }
@@ -248,17 +246,82 @@ function renderFunds() {
 }
 function renderBudget() {
   const items = state.budget.map(b => {
-    const spent = spentForCat(b.category), bud = +b.budgeted || 0, remain = bud - spent, w = bud > 0 ? Math.min(100, spent / bud * 100) : 0;
+    const matP = budgetMaterialsPlanned(b), labP = budgetLabourPlanned(b);
+    const matS = spentMaterialsForCat(b.category), labS = spentLabourForCat(b.category);
+    const plan = budgetPlan(b), spent = matS + labS, remain = plan - spent;
     return '<div class="entry"><div class="entry-top"><div><p class="entry-name">' + esc(b.category) + '</p>' +
-      (b.notes ? '<p class="entry-sub">' + esc(b.notes) + '</p>' : '') + '</div><span class="entry-amount">' + money(bud) + '</span></div>' +
-      '<div class="entry-meta"><span class="meta-item">Spent <strong>' + money(spent) + '</strong></span>' +
+      (b.notes ? '<p class="entry-sub">' + esc(b.notes) + '</p>' : '') + '</div><span class="entry-amount">' + money(plan) + '</span></div>' +
+      envelopeHtml('Materials', matP, matS) +
+      envelopeHtml('Labour', labP, labS) +
+      '<div class="entry-meta" style="margin-top:10px"><span class="meta-item">Total spent <strong>' + money(spent) + '</strong></span>' +
       '<span class="meta-item">Remaining <strong style="color:' + (remain < 0 ? 'var(--spend)' : 'var(--accent)') + '">' + money(remain) + '</strong></span></div>' +
-      '<div class="bar"><span class="' + (spent > bud ? 'over' : '') + '" style="width:' + w + '%"></span></div>' +
       '<div class="entry-actions">' + actBtns('budget', b.id) + '</div></div>';
   }).join('');
-  return head('Budget by category', 'Plan what each part should cost. Actual spend fills in from purchases.', 'budget') +
-    (state.budget.length ? '<div class="entry-list">' + items + '</div>' : empty('No budget categories yet', 'Add a category like "Roofing" with a planned amount.'));
+  return head('Budget by trade', 'Plan materials and labour for each part. Shop bills hit materials; contractor payments hit labour.', 'budget') +
+    financeStripHtml() +
+    (state.budget.length ? '<div class="entry-list">' + items + '</div>' : empty('No budget trades yet', 'Add Plumbing, Electrical, Foundation… with a materials amount and a labour amount.'));
 }
+
+function labourThumb(row) {
+  if (row.thumb) return row.thumb;
+  const ph = Array.isArray(row.photos) && row.photos[0];
+  return (ph && (ph.thumb || ph.thumbDataUrl)) || '';
+}
+
+function renderLabour() {
+  const rows = [...(state.labour || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const items = rows.map(p => {
+    const thumb = labourThumb(p);
+    return '<div class="entry"><div class="entry-top"><div>' +
+      '<p class="entry-name">' + esc(p.payee || 'Contractor') + '</p>' +
+      '<p class="entry-sub">' + esc(p.category || '') + ' · ' + esc(payMethodLabel(p.method)) + ' · ' + esc(p.date || '') + '</p></div>' +
+      '<span class="entry-amount" style="color:var(--spend)">−' + money(labourTotal(p)) + '</span></div>' +
+      (thumb ? '<div class="photo-booklet" style="margin-top:8px"><img src="' + esc(thumb) + '" data-preview="labour" data-id="' + p.id + '" data-idx="0" alt="Proof"></div>' : '') +
+      (p.notes ? '<div class="entry-meta"><span class="meta-item">' + esc(p.notes) + '</span></div>' : '') +
+      '<div class="entry-actions">' + actBtns('labour', p.id) + '</div></div>';
+  }).join('');
+  return head('Labour payments', 'Pay the plumber or electrician here. Cash, card, or Juice — attach the receipt or screenshot. Hits the labour envelope for that trade.', 'labour') +
+    (rows.length ? '<div class="entry-list">' + items + '</div>' : empty('No labour payments yet', 'Add who you paid, the trade, amount, and a photo of the cash receipt or Juice / MCB screenshot.'));
+}
+
+function renderPaid() {
+  const rows = paidToRows();
+  if (!rows.length) {
+    return '<div class="panel-head"><div><p class="panel-title">Paid to</p><p class="panel-desc">Every shop bill and labour payment, grouped by who received the money.</p></div></div>' +
+      empty('No payments yet', 'Log a purchase or a labour payment and it will show up here.');
+  }
+  const items = rows.map(r => '<div class="entry paid-card" data-payee="' + esc(r.key) + '"><div class="entry-top"><div>' +
+    '<p class="entry-name">' + esc(r.name) + '</p>' +
+    '<p class="entry-sub">Last paid ' + esc(r.last || '—') + '</p></div>' +
+    '<span class="entry-amount">' + money(r.total) + '</span></div>' +
+    '<div class="entry-meta"><span class="meta-item">Materials <strong>' + money(r.materials) + '</strong></span>' +
+    '<span class="meta-item">Labour <strong>' + money(r.labour) + '</strong></span>' +
+    '<span class="meta-item">' + r.items.length + ' payment' + (r.items.length === 1 ? '' : 's') + '</span></div></div>').join('');
+  return '<div class="panel-head"><div><p class="panel-title">Paid to</p><p class="panel-desc">Tap a name to see cash, card, and Juice history with proof.</p></div></div>' +
+    '<div class="entry-list">' + items + '</div>';
+}
+
+function openPaidModal(key) {
+  const row = paidToRows().find(r => r.key === key);
+  if (!row) return;
+  const lines = row.items.map(it => {
+    const thumb = it.thumb
+      ? '<img src="' + esc(it.thumb) + '" class="thumb-sm" data-preview="' + (it.source === 'labour' ? 'labour' : 'purchase') + '" data-id="' + esc(it.id) + '" data-idx="0" alt="Proof">'
+      : '';
+    return '<tr><td>' + esc(it.date || '—') + '</td><td>' + (it.kind === 'labour' ? 'Labour' : 'Materials') + '</td>' +
+      '<td>' + esc(it.category || '—') + '</td><td>' + esc(payMethodLabel(it.method)) + '</td>' +
+      '<td class="num">' + money(it.amount) + '</td><td class="item-cell">' + thumb + '<span>' + esc(it.label || '') + '</span></td></tr>';
+  }).join('');
+  overlayModal({
+    kind: 'paid-detail',
+    title: row.name,
+    sub: 'Materials ' + money(row.materials) + ' · Labour ' + money(row.labour) + ' · Total ' + money(row.total),
+    body: '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Date</th><th>Kind</th><th>Trade</th><th>Method</th><th class="num">Amount</th><th>Proof</th></tr></thead><tbody>' +
+      lines + '</tbody></table></div>',
+    actions: '<button class="btn-cancel" id="modal-cancel">Close</button>'
+  });
+}
+
 function renderActions() {
   const cols = [
     {id: 'pending', title: 'To do'},
@@ -582,8 +645,8 @@ let purchaseExpandedId = null;
 
 function renderPurchases() {
   if (!state.purchases.length) {
-    return head('Purchases &amp; receipts', 'Camera or Gallery scans with AI. Correct the fields, then Save. The original photo is kept.', 'purchases') +
-      empty('No purchases logged yet', 'Take a photo or pick from the gallery. AI fills the table; Save stays at the bottom.');
+    return head('Purchases &amp; receipts', 'Shop bills: cash receipt, Juice screenshot, or MCB card. AI fills items. Hits the materials envelope.', 'purchases') +
+      empty('No purchases logged yet', 'Take a photo or pick from the gallery. Mark cash, card, or Juice, then Save.');
   }
 
   const cats = [...new Set(state.purchases.flatMap(p => purchaseCategories(p)))].sort();
@@ -593,7 +656,7 @@ function renderPurchases() {
   let filtered = state.purchases.filter(p => {
     const pcats = purchaseCategories(p);
     if (purchaseCatFilter && !pcats.includes(purchaseCatFilter) && (p.category || '') !== purchaseCatFilter) return false;
-    const blob = ((p.item || '') + ' ' + (p.seller || '') + ' ' + pcats.join(' ') + ' ' + (p.receipt || '')).toLowerCase();
+    const blob = ((p.item || '') + ' ' + (p.seller || '') + ' ' + pcats.join(' ') + ' ' + (p.receipt || '') + ' ' + (p.notes || '') + ' ' + payMethodLabel(p.paymentMethod)).toLowerCase();
     if (q && !blob.includes(q)) return false;
     return true;
   });
@@ -607,7 +670,7 @@ function renderPurchases() {
 
   const arrow = col => '<span class="sort-arrow">' + (purchaseSort.col === col ? (purchaseSort.asc ? '▲' : '▼') : '') + '</span>';
   const thCls = col => purchaseSort.col === col ? ' class="sorted"' : '';
-  const cols = [['date','Date'],['item','Item'],['seller','Seller'],['category','Category'],['price','Total'],['receipt','Receipt #']];
+  const cols = [['date','Date'],['item','Item'],['seller','Seller'],['category','Category'],['price','Total'],['paymentMethod','Paid by'],['receipt','Receipt #']];
 
   let rows = '';
   filtered.forEach(p => {
@@ -618,21 +681,22 @@ function renderPurchases() {
       '<td>' + esc(p.seller || '') + '</td>' +
       '<td>' + catChips(p) + '</td>' +
       '<td class="num tight">' + money(displayPrice) + '</td>' +
+      '<td>' + esc(payMethodLabel(p.paymentMethod)) + '</td>' +
       '<td>' + esc(p.receipt || '') + '</td>' +
       '<td>' + actBtns('purchases', p.id) + '</td></tr>';
 
     if (purchaseExpandedId === p.id) {
-      rows += '<tr class="purchase-detail"><td colspan="7">' + renderPurchaseDetail(p) + '</td></tr>';
+      rows += '<tr class="purchase-detail"><td colspan="8">' + renderPurchaseDetail(p) + '</td></tr>';
     }
   });
 
-  return head('Purchases &amp; receipts', 'Camera or Gallery scans with AI. Correct the fields, then Save. The original photo is kept.', 'purchases') +
+  return head('Purchases &amp; receipts', 'Shop bills: cash receipt, Juice screenshot, or MCB card. AI fills items. Hits the materials envelope.', 'purchases') +
     '<div class="purchase-toolbar">' +
     '<input class="purchase-search" placeholder="Search purchases\u2026" value="' + esc(purchaseSearch) + '">' +
     '<select class="purchase-cat-filter">' + catOpts + '</select></div>' +
     '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr>' +
     cols.map(([k, l]) => '<th data-sort="' + k + '"' + thCls(k) + '>' + l + arrow(k) + '</th>').join('') +
-    '<th>Actions</th></tr></thead><tbody>' + (rows || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--ink-2)">No matches</td></tr>') + '</tbody></table></div>';
+    '<th>Actions</th></tr></thead><tbody>' + (rows || '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink-2)">No matches</td></tr>') + '</tbody></table></div>';
 }
 
 function renderPurchaseDetail(p) {
@@ -646,6 +710,8 @@ function renderPurchaseDetail(p) {
   if (p.driveLink) html += '<dt>Drive</dt><dd><a href="' + esc(p.driveLink) + '" target="_blank" rel="noopener">' + esc(p.driveFolder || 'Open in Drive') + '</a></dd>';
   const displayTotal = purchaseTotal(p);
   html += '<dt>Total</dt><dd class="tight">' + moneyDec(displayTotal) + '</dd>';
+  if (p.paymentMethod) html += '<dt>Paid by</dt><dd>' + esc(payMethodLabel(p.paymentMethod)) + '</dd>';
+  if (p.notes) html += '<dt>Notes</dt><dd>' + esc(p.notes) + '</dd>';
   html += '</dl>';
   if (Array.isArray(p.lines) && p.lines.length) {
     html += '<table class="detail-lines"><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th><th>Category</th></tr></thead><tbody>';
@@ -662,10 +728,12 @@ export function render() {
   computeSummary();
   const root = $('panel-root');
   if (!root) return;
-  const renderer = {dashboard: renderDashboard, funds: renderFunds, budget: renderBudget, actions: renderActions, sellers: renderSellers, purchases: renderPurchases}[session.activeTab];
+  const renderer = {dashboard: renderDashboard, funds: renderFunds, budget: renderBudget, actions: renderActions, sellers: renderSellers, purchases: renderPurchases, labour: renderLabour, paid: renderPaid}[session.activeTab];
   root.innerHTML = renderer ? renderer() : renderDashboard();
   attach();
   updateSyncPill();
+  const fab = $('fab-add');
+  if (fab) fab.style.display = session.activeTab === 'paid' ? 'none' : '';
 }
 
 function attach() {
@@ -717,6 +785,9 @@ function attach() {
     if (sellerItemSearch) focusSellerSearch();
   }
   bindSellerCatalogClicks();
+  root.querySelectorAll('.paid-card[data-payee]').forEach(card => {
+    card.onclick = () => openPaidModal(card.dataset.payee);
+  });
   const searchEl = root.querySelector('.purchase-search');
   if (searchEl) {
     searchEl.oninput = e => { purchaseSearch = e.target.value; render(); };
@@ -798,11 +869,13 @@ function formBody(kind, p) {
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div></div>';
   }
   if (kind === 'budget') {
-    p = p || {category: '', budgeted: '', notes: ''};
+    p = p || {category: '', budgeted: '', budgetedMaterials: '', budgetedLabour: '', notes: ''};
+    const mat = (p.budgetedMaterials != null && p.budgetedMaterials !== '') ? p.budgetedMaterials : p.budgeted;
     return '<div class="form-grid">' +
-      '<div class="field"><label class="req">Category</label><input list="category-options" id="m-category" value="' + esc(p.category) + '" placeholder="Roofing, Kitchen…"></div>' +
-      '<div class="field"><label class="req">Planned (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-budgeted" value="' + esc(p.budgeted) + '" placeholder="e.g. 200000"></div>' +
-      '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="Optional"></div></div>';
+      '<div class="field wide"><label class="req">Trade</label><input list="category-options" id="m-category" value="' + esc(p.category) + '" placeholder="Plumbing, Electrical…"></div>' +
+      '<div class="field"><label class="req">Materials (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-budgeted-mat" value="' + esc(mat) + '" placeholder="Pipes, fittings, shops"></div>' +
+      '<div class="field"><label>Labour (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-budgeted-lab" value="' + esc(p.budgetedLabour || '') + '" placeholder="Plumber, electrician…"></div>' +
+      '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="e.g. Jerome"></div></div>';
   }
   if (kind === 'actions') {
     p = p || {title: '', due: '', status: 'pending', notes: ''};
@@ -853,14 +926,16 @@ function formBody(kind, p) {
     return photoFieldHtml({
       photos, hasKey,
       kind: 'purchase', recordId: p.id || '', alt: 'Receipt',
-      hint: 'For multi-page receipts, add all photos first. AI reads every page into one table.',
+      accept: 'image/*,application/pdf',
+      hint: 'Cash receipt, Juice screenshot/PDF, or card transaction. For multi-page bills, add all photos first. AI reads every page into one table.',
       ocrLabel: hasKey ? 'Re-scan with AI' : 'Scan receipt',
       extraHtml: hasKey ? '' : inlineAiHtml()
     }) +
       '<div class="receipt-meta">' +
       '<div class="field"><label>Seller</label><input id="m-seller" value="' + esc(p.seller) + '" placeholder="Shop / company" autocomplete="off"></div>' +
       '<div class="field"><label>Date</label><input type="date" id="m-date" value="' + esc(p.date || todayStr()) + '"></div>' +
-      '<div class="field"><label>Receipt no.</label><input id="m-receipt" value="' + esc(p.receipt) + '" placeholder="Optional"></div></div>' +
+      '<div class="field"><label>Receipt no.</label><input id="m-receipt" value="' + esc(p.receipt) + '" placeholder="Optional"></div>' +
+      '<div class="field"><label>Paid by</label>' + methodSelectHtml('m-method', p.paymentMethod) + '</div></div>' +
       '<div class="field wide"><label>Categories</label>' +
       categoryPillsHtml(purchaseCategories(p)) +
       '<p class="field-hint">Tap all that apply. AI also tags each line — change a line if it guessed wrong.</p>' +
@@ -870,7 +945,25 @@ function formBody(kind, p) {
       purchaseLinesHtml(lines) +
       '<div class="receipt-total-row">' +
       '<div class="field"><label class="req">Total (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="' + esc(p.price) + '" placeholder="Grand total"></div>' +
-      '<div class="field"><label class="req">Summary</label><input id="m-item" value="' + esc(p.item) + '" placeholder="AI writes a short label" autocomplete="off"></div></div>';
+      '<div class="field"><label class="req">Summary</label><input id="m-item" value="' + esc(p.item) + '" placeholder="AI writes a short label" autocomplete="off"></div></div>' +
+      '<div class="field wide" style="margin-top:12px"><label>Notes</label><input id="m-notes" value="' + esc(p.notes || '') + '" placeholder="Optional"></div>';
+  }
+  if (kind === 'labour') {
+    p = p || {payee: '', category: '', amount: '', date: todayStr(), method: 'cash', notes: '', photos: []};
+    const photos = existingFormPhotos(p, 'labour');
+    return photoFieldHtml({
+      photos, hasKey: false, skipOcr: true,
+      kind: 'labour', recordId: p.id || '', alt: 'Proof',
+      accept: 'image/*,application/pdf',
+      hint: 'Cash receipt, Juice screenshot/PDF, or MCB card transaction. No AI scan — just attach proof.'
+    }) +
+      '<div class="form-grid">' +
+      '<div class="field"><label class="req">Paid to</label><input id="m-payee" value="' + esc(p.payee) + '" placeholder="Plumber, electrician…" autocomplete="off"></div>' +
+      '<div class="field"><label class="req">Trade</label><input list="category-options" id="m-category" value="' + esc(p.category) + '" placeholder="Plumbing, Electrical…"></div>' +
+      '<div class="field"><label class="req">Amount (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-amount" value="' + esc(p.amount) + '" placeholder="e.g. 15000"></div>' +
+      '<div class="field"><label>Date</label><input type="date" id="m-date" value="' + esc(p.date || todayStr()) + '"></div>' +
+      '<div class="field"><label>Paid by</label>' + methodSelectHtml('m-method', p.method || 'cash') + '</div>' +
+      '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes || '') + '" placeholder="Optional"></div></div>';
   }
   return '';
 }
@@ -883,10 +976,11 @@ export function openModal(kind, rec) {
   const title = (rec ? TITLES[kind][1] : TITLES[kind][0]);
   const sub = {
     funds: 'How much came in, and from where.',
-    budget: 'A category and the amount you planned for it.',
+    budget: 'Plan materials and labour for this trade. Shop bills deduct materials; contractor payments deduct labour.',
     actions: 'One thing still to do. Due date is optional.',
     sellers: 'Snap or pick quote photos. Each photo can be a different shop — AI fills name, contact, and lines.',
-    purchases: 'Snap or pick a receipt. AI fills items, categories, and a short label. You can still correct anything.'
+    purchases: 'Shop bill: cash receipt, Juice screenshot, or MCB card. AI fills items. Hits the materials envelope.',
+    labour: 'Contractor pay: who, trade, amount, cash/card/Juice, and a photo of the proof.'
   }[kind];
   const modal = $('modal');
   const overlay = $('overlay');
@@ -901,7 +995,7 @@ export function openModal(kind, rec) {
   overlay.classList.add('show');
   bindModal();
   if (kind !== 'purchases' && kind !== 'sellers') setTimeout(() => {
-    const el = $('m-amount') || $('m-title') || $('m-name');
+    const el = $('m-amount') || $('m-payee') || $('m-title') || $('m-name') || $('m-category');
     if (el) el.focus();
   }, 40);
 }
@@ -928,7 +1022,7 @@ function bindModal() {
     e.preventDefault();
     saveModal();
   };
-  bindAlbumControls(modal, maybeScanAfterPhoto);
+  bindAlbumControls(modal, (session.editKind === 'purchases' || session.editKind === 'sellers') ? maybeScanAfterPhoto : null);
   const ocr = $('m-ocr'); if (ocr) ocr.onclick = startReceiptScan;
   wireModelPicker('m-ai', 'm-ai-custom');
   bindLineTable();
@@ -1006,7 +1100,7 @@ function sellerRecordFromGroup(g, shared) {
 async function saveModal() {
   if (saveBusy) return;
   const k = session.editKind, val = id => { const el = $(id); return el ? el.value : ''; };
-  if (k === 'catalog-item' || k === 'shop-list') return;
+  if (k === 'catalog-item' || k === 'shop-list' || k === 'paid-detail') return;
   if (!k || !state[k]) return showErr('Could not save: invalid form state. Close and open again.');
   const editing = session.editing;
   setSaveBusy(true);
@@ -1019,9 +1113,15 @@ async function saveModal() {
     if (!finiteNum(a) || +a < 0) return showErr('Enter a valid amount.');
     obj = {type: val('m-type'), label: val('m-label').trim(), amount: +a, date: val('m-date') || todayStr(), notes: val('m-notes').trim()};
   } else if (k === 'budget') {
-    const c = val('m-category').trim(), b = val('m-budgeted');
-    if (!c || !finiteNum(b) || +b < 0) return showErr('Enter a category and a valid budgeted amount.');
-    obj = {category: c, budgeted: +b, notes: val('m-notes').trim()};
+    const c = val('m-category').trim();
+    const mat = val('m-budgeted-mat');
+    const lab = val('m-budgeted-lab');
+    if (!c) return showErr('Enter a trade (Plumbing, Electrical…).');
+    if (!finiteNum(mat) || +mat < 0) return showErr('Enter a materials amount (0 is ok).');
+    if (lab !== '' && (!finiteNum(lab) || +lab < 0)) return showErr('Enter a valid labour amount, or leave it blank.');
+    const materials = +mat;
+    const labourAmt = lab === '' ? 0 : +lab;
+    obj = {category: c, budgetedMaterials: materials, budgetedLabour: labourAmt, budgeted: materials + labourAmt, notes: val('m-notes').trim()};
   } else if (k === 'actions') {
     const t = val('m-title').trim();
     if (!t) return showErr('Enter a task name.');
@@ -1118,6 +1218,8 @@ async function saveModal() {
       price: +form.price,
       date: form.date || todayStr(),
       receipt: form.receipt,
+      paymentMethod: val('m-method') || 'cash',
+      notes: val('m-notes').trim(),
       lines: form.lines,
       thumb
     };
@@ -1160,6 +1262,55 @@ async function saveModal() {
       obj.driveFolder = session.editing.driveFolder;
       obj.driveFileIds = Array.isArray(session.editing.driveFileIds) ? session.editing.driveFileIds.slice() : (session.editing.driveFileId ? [session.editing.driveFileId] : []);
       obj.driveFiles = Array.isArray(session.editing.driveFiles) ? session.editing.driveFiles.slice() : [];
+    }
+  } else if (k === 'labour') {
+    const payee = val('m-payee').trim();
+    const cat = val('m-category').trim();
+    const amt = val('m-amount');
+    if (!payee) return showErr('Enter who you paid.');
+    if (!cat) return showErr('Enter the trade (Plumbing, Electrical…).');
+    if (!finiteNum(amt) || +amt < 0) return showErr('Enter a valid amount.');
+    if (!state.labour) state.labour = [];
+    obj = {
+      payee,
+      category: cat,
+      amount: +amt,
+      date: val('m-date') || todayStr(),
+      method: val('m-method') || 'cash',
+      notes: val('m-notes').trim()
+    };
+    const pending = pendingPhotos();
+    if (pending.length) {
+      const links = [];
+      if (settings.driveToken) {
+        try {
+          for (const ph of pending) {
+            const up = await uploadOriginalToDrive(ph.originalFile, {
+              item: payee, category: cat, seller: payee, date: obj.date, receipt: 'labour', ext: ph.ext
+            });
+            if (up) links.push({id: up.id, webViewLink: up.webViewLink, folderPath: up.folderPath || ''});
+          }
+        } catch (e) {
+          return showErr('Could not upload proof to Drive. Enable Drive API if needed, then tap Save again. The photos are still attached.');
+        }
+      } else {
+        toast('Saved on this device. Sign in to keep the original photos in Drive.');
+      }
+      obj.photoLinks = links;
+      obj.photos = pending.map((ph, i) => persistablePhoto(ph, links[i]));
+      obj.thumb = (pending[0] && (pending[0].thumbDataUrl || pending[0].thumb)) || '';
+      if (links[0]) {
+        obj.driveLink = links[0].webViewLink;
+        obj.driveFileId = links[0].id;
+      }
+    } else if (session.photoCleared) {
+      obj.photos = []; obj.photoLinks = []; obj.thumb = ''; obj.driveLink = null; obj.driveFileId = null;
+    } else if (editing) {
+      obj.photos = Array.isArray(editing.photos) ? editing.photos.slice() : [];
+      obj.photoLinks = Array.isArray(editing.photoLinks) ? editing.photoLinks.slice() : [];
+      obj.thumb = editing.thumb || '';
+      obj.driveLink = editing.driveLink;
+      obj.driveFileId = editing.driveFileId;
     }
   }
   if (!obj) return;
@@ -1335,7 +1486,7 @@ export function bindShell() {
   });
   const fab = $('fab-add');
   if (fab) fab.onclick = () => {
-    const k = session.activeTab === 'dashboard' ? 'purchases' : session.activeTab;
+    const k = session.activeTab === 'dashboard' ? 'purchases' : (session.activeTab === 'paid' ? 'labour' : session.activeTab);
     if (TITLES[k]) openModal(k, null);
   };
   watchChrome();
