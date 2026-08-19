@@ -1,19 +1,21 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260818x';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260818x';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260818x';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260818x';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819a';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260819a';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260819a';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819a';
 import {
   PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
   totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
-  extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows
-} from './finance.js?v=20260818x';
-import {hub} from './hub.js?v=20260818x';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260818x';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260818x';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260818x';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260818x';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260818x';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260818x';
+  extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows,
+  allPayments, labourPayments, labourBudgetPlanned, labourByTrade, labourByPayee, defaultSpendKind,
+  materialsSpent, labourSpent
+} from './finance.js?v=20260819a';
+import {hub} from './hub.js?v=20260819a';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819a';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819a';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819a';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819a';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260819a';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260819a';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -21,6 +23,8 @@ let sellerCatalogPage = 1;
 let catalogCache = [];
 let shopListDraft = '';
 let saveBusy = false;
+let paidSearch = '';
+let paidKindFilter = '';
 
 const ICO = {
   edit: '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
@@ -262,64 +266,146 @@ function renderBudget() {
     (state.budget.length ? '<div class="entry-list">' + items + '</div>' : empty('No budget trades yet', 'Add Plumbing, Electrical, Foundation… with a materials amount and a labour amount.'));
 }
 
-function labourThumb(row) {
-  if (row.thumb) return row.thumb;
-  const ph = Array.isArray(row.photos) && row.photos[0];
-  return (ph && (ph.thumb || ph.thumbDataUrl)) || '';
+function kindToggleHtml(source, id, kind) {
+  const matOn = kind === 'materials' ? ' on' : '';
+  const labOn = kind === 'labour' ? ' on' : '';
+  return '<div class="kind-toggle" role="group" aria-label="Materials or labour">' +
+    '<label class="kind-check' + matOn + '"><input type="checkbox" data-kind-set="materials" data-source="' + source + '" data-id="' + id + '"' + (kind === 'materials' ? ' checked' : '') + '><span>Materials</span></label>' +
+    '<label class="kind-check' + labOn + '"><input type="checkbox" data-kind-set="labour" data-source="' + source + '" data-id="' + id + '"' + (kind === 'labour' ? ' checked' : '') + '><span>Labour</span></label></div>';
+}
+
+function chartBarHtml(rows, opts) {
+  opts = opts || {};
+  const max = Math.max(1, ...rows.map(r => Math.max(r.spent || r.amount || 0, r.planned || 0)));
+  return rows.map(r => {
+    const spent = r.spent ?? r.amount ?? 0;
+    const planned = r.planned || 0;
+    const sw = Math.min(100, spent / max * 100);
+    const pw = planned ? Math.min(100, planned / max * 100) : 0;
+    const over = planned > 0 && spent > planned;
+    const label = r.trade || r.name || '—';
+    return '<div class="chart-row">' +
+      '<span class="chart-label" title="' + esc(label) + '">' + esc(label) + '</span>' +
+      '<div class="chart-track">' +
+      (opts.showPlan ? '<span class="chart-plan" style="width:' + pw + '%" title="Planned ' + money(planned) + '"></span>' : '') +
+      '<span class="chart-spent' + (over ? ' over' : '') + '" style="width:' + sw + '%" title="Spent ' + money(spent) + '"></span></div>' +
+      '<span class="chart-val">' + money(spent) + (planned ? '<em>/ ' + money(planned) + '</em>' : '') + '</span></div>';
+  }).join('');
+}
+
+function paymentTableRow(p, opts) {
+  opts = opts || {};
+  const preview = p.source === 'labour' ? 'labour' : 'purchase';
+  const thumb = p.thumb
+    ? '<img src="' + esc(p.thumb) + '" class="thumb-sm" data-preview="' + preview + '" data-id="' + esc(p.id) + '" data-idx="0" alt="Proof">'
+    : '';
+  const editKind = p.source;
+  return '<tr>' +
+    '<td>' + esc(p.date || '—') + '</td>' +
+    '<td><strong>' + esc(p.payee || '—') + '</strong></td>' +
+    '<td class="item-cell">' + thumb + '<span>' + esc(p.label || '') + '</span></td>' +
+    '<td>' + (p.category ? '<span class="chip cat">' + esc(p.category) + '</span>' : '—') + '</td>' +
+    (opts.hideKind ? '' : ('<td class="kind-cell">' + kindToggleHtml(p.source, p.id, p.spendKind) + '</td>')) +
+    '<td>' + esc(payMethodLabel(p.method)) + '</td>' +
+    '<td class="num tight">' + money(p.amount) + '</td>' +
+    (opts.hideActions ? '' : ('<td><div class="row-actions">' +
+      '<button type="button" class="icon-btn icon-only" data-edit="' + editKind + '" data-id="' + p.id + '" title="Edit" aria-label="Edit">' + ICO.edit + '</button>' +
+      '<button type="button" class="icon-btn icon-only danger" data-del="' + editKind + '" data-id="' + p.id + '" title="Delete" aria-label="Delete">' + ICO.trash + '</button></div></td>')) +
+    '</tr>';
 }
 
 function renderLabour() {
-  const rows = [...(state.labour || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const items = rows.map(p => {
-    const thumb = labourThumb(p);
-    return '<div class="entry"><div class="entry-top"><div>' +
-      '<p class="entry-name">' + esc(p.payee || 'Contractor') + '</p>' +
-      '<p class="entry-sub">' + esc(p.category || '') + ' · ' + esc(payMethodLabel(p.method)) + ' · ' + esc(p.date || '') + '</p></div>' +
-      '<span class="entry-amount" style="color:var(--spend)">−' + money(labourTotal(p)) + '</span></div>' +
-      (thumb ? '<div class="photo-booklet" style="margin-top:8px"><img src="' + esc(thumb) + '" data-preview="labour" data-id="' + p.id + '" data-idx="0" alt="Proof"></div>' : '') +
-      (p.notes ? '<div class="entry-meta"><span class="meta-item">' + esc(p.notes) + '</span></div>' : '') +
-      '<div class="entry-actions">' + actBtns('labour', p.id) + '</div></div>';
-  }).join('');
-  return head('Labour payments', 'Pay the plumber or electrician here. Cash, card, or Juice — attach the receipt or screenshot. Hits the labour envelope for that trade.', 'labour') +
-    (rows.length ? '<div class="entry-list">' + items + '</div>' : empty('No labour payments yet', 'Add who you paid, the trade, amount, and a photo of the cash receipt or Juice / MCB screenshot.'));
+  const rows = labourPayments();
+  const spent = labourSpent();
+  const planned = labourBudgetPlanned();
+  const remain = planned - spent;
+  const pct = planned > 0 ? Math.round(spent / planned * 100) : 0;
+
+  let html = head('Labour payments', 'Contractor pay and anything you marked as labour on Paid. Charts compare spend to your labour budget per trade.', 'labour');
+
+  html += '<div class="labour-summary">' +
+    '<div class="insights-grid labour-stats">' +
+    '<div class="insight-card"><p class="k">Labour spent</p><p class="v bad">' + money(spent) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Labour planned</p><p class="v">' + money(planned) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Remaining</p><p class="v ' + (remain < 0 ? 'bad' : 'good') + '">' + money(remain) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Budget used</p><p class="v ' + (pct > 100 ? 'bad' : '') + '">' + (planned ? pct + '%' : '—') + '</p></div>' +
+    '</div>';
+
+  if (planned > 0) {
+    html += '<div class="chart-gauge"><div class="chart-gauge-bar"><span style="width:' + Math.min(100, pct) + '%" class="' + (pct > 100 ? 'over' : '') + '"></span></div>' +
+      '<p class="chart-gauge-note">' + money(spent) + ' of ' + money(planned) + ' labour budget used' +
+      (remain < 0 ? ' · <strong style="color:var(--spend)">Over by ' + money(-remain) + '</strong>' : '') + '</p></div>';
+  }
+  html += '</div>';
+
+  const byTrade = labourByTrade();
+  if (byTrade.length) {
+    html += '<div class="dash-section chart-panel"><p class="dash-title">Labour by trade</p>' +
+      '<p class="panel-desc" style="margin:-6px 0 10px">Green bar = spent · faint bar = planned</p>' +
+      chartBarHtml(byTrade, {showPlan: true}) + '</div>';
+  }
+
+  const byPayee = labourByPayee().slice(0, 8);
+  if (byPayee.length) {
+    html += '<div class="dash-section chart-panel"><p class="dash-title">Top contractors paid</p>' +
+      chartBarHtml(byPayee.map(r => ({name: r.name, amount: r.amount, spent: r.amount})), {showPlan: false}) + '</div>';
+  }
+
+  if (!rows.length) {
+    html += empty('No labour payments yet', 'Add a contractor payment here, or mark a shop bill as Labour on the Paid tab.');
+    return html;
+  }
+
+  html += '<div class="dash-section"><p class="dash-title">All labour payments</p>' +
+    '<div class="purchase-table-wrap"><table class="purchase-table labour-table"><thead><tr>' +
+    '<th>Date</th><th>Paid to</th><th>What</th><th>Trade</th><th>Method</th><th class="num">Amount</th><th>Actions</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(p => paymentTableRow(p, {hideKind: true})).join('') +
+    '</tbody></table></div></div>';
+  return html;
 }
 
 function renderPaid() {
-  const rows = paidToRows();
-  if (!rows.length) {
-    return '<div class="panel-head"><div><p class="panel-title">Paid to</p><p class="panel-desc">Every shop bill and labour payment, grouped by who received the money.</p></div></div>' +
-      empty('No payments yet', 'Log a purchase or a labour payment and it will show up here.');
-  }
-  const items = rows.map(r => '<div class="entry paid-card" data-payee="' + esc(r.key) + '"><div class="entry-top"><div>' +
-    '<p class="entry-name">' + esc(r.name) + '</p>' +
-    '<p class="entry-sub">Last paid ' + esc(r.last || '—') + '</p></div>' +
-    '<span class="entry-amount">' + money(r.total) + '</span></div>' +
-    '<div class="entry-meta"><span class="meta-item">Materials <strong>' + money(r.materials) + '</strong></span>' +
-    '<span class="meta-item">Labour <strong>' + money(r.labour) + '</strong></span>' +
-    '<span class="meta-item">' + r.items.length + ' payment' + (r.items.length === 1 ? '' : 's') + '</span></div></div>').join('');
-  return '<div class="panel-head"><div><p class="panel-title">Paid to</p><p class="panel-desc">Tap a name to see cash, card, and Juice history with proof.</p></div></div>' +
-    '<div class="entry-list">' + items + '</div>';
-}
+  const all = allPayments();
+  const matTotal = materialsSpent();
+  const labTotal = labourSpent();
 
-function openPaidModal(key) {
-  const row = paidToRows().find(r => r.key === key);
-  if (!row) return;
-  const lines = row.items.map(it => {
-    const thumb = it.thumb
-      ? '<img src="' + esc(it.thumb) + '" class="thumb-sm" data-preview="' + (it.source === 'labour' ? 'labour' : 'purchase') + '" data-id="' + esc(it.id) + '" data-idx="0" alt="Proof">'
-      : '';
-    return '<tr><td>' + esc(it.date || '—') + '</td><td>' + (it.kind === 'labour' ? 'Labour' : 'Materials') + '</td>' +
-      '<td>' + esc(it.category || '—') + '</td><td>' + esc(payMethodLabel(it.method)) + '</td>' +
-      '<td class="num">' + money(it.amount) + '</td><td class="item-cell">' + thumb + '<span>' + esc(it.label || '') + '</span></td></tr>';
-  }).join('');
-  overlayModal({
-    kind: 'paid-detail',
-    title: row.name,
-    sub: 'Materials ' + money(row.materials) + ' · Labour ' + money(row.labour) + ' · Total ' + money(row.total),
-    body: '<div class="purchase-table-wrap"><table class="purchase-table"><thead><tr><th>Date</th><th>Kind</th><th>Trade</th><th>Method</th><th class="num">Amount</th><th>Proof</th></tr></thead><tbody>' +
-      lines + '</tbody></table></div>',
-    actions: '<button class="btn-cancel" id="modal-cancel">Close</button>'
+  if (!all.length) {
+    return '<div class="panel-head"><div><p class="panel-title">Paid to</p><p class="panel-desc">Every payment out — tick Materials or Labour so budgets stay correct.</p></div></div>' +
+      empty('No payments yet', 'Log a purchase or a labour payment first.');
+  }
+
+  const q = paidSearch.toLowerCase();
+  let filtered = all.filter(p => {
+    if (paidKindFilter && p.spendKind !== paidKindFilter) return false;
+    if (!q) return true;
+    const blob = (p.payee + ' ' + p.label + ' ' + p.category + ' ' + p.notes).toLowerCase();
+    return blob.includes(q);
   });
+
+  const kindPills = [
+    ['', 'All'],
+    ['materials', 'Materials'],
+    ['labour', 'Labour']
+  ].map(([id, label]) =>
+    '<button type="button" class="cat-pill' + (paidKindFilter === id ? ' on' : '') + '" data-paid-kind="' + id + '">' + label + '</button>'
+  ).join('');
+
+  const tableRows = filtered.map(p => paymentTableRow(p)).join('') ||
+    '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink-2)">No matches</td></tr>';
+
+  return '<div class="panel-head"><div><p class="panel-title">Paid to</p><p class="panel-desc">Every payment out. Tick <strong>Materials</strong> (shops) or <strong>Labour</strong> (contractors) — budgets update immediately.</p></div></div>' +
+    '<div class="insights-grid paid-stats">' +
+    '<div class="insight-card"><p class="k">Total paid</p><p class="v">' + money(matTotal + labTotal) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Materials</p><p class="v">' + money(matTotal) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Labour</p><p class="v bad">' + money(labTotal) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Payments</p><p class="v">' + all.length + '</p></div></div>' +
+    '<div class="purchase-toolbar">' +
+    '<input class="purchase-search paid-search" placeholder="Search payee or description…" value="' + esc(paidSearch) + '">' +
+    '<div class="seller-cat-pills paid-kind-pills">' + kindPills + '</div></div>' +
+    '<div class="purchase-table-wrap"><table class="purchase-table paid-table"><thead><tr>' +
+    '<th>Date</th><th>Paid to</th><th>What</th><th>Trade</th><th>Kind</th><th>Method</th><th class="num">Amount</th><th>Actions</th>' +
+    '</tr></thead><tbody>' + tableRows + '</tbody></table></div>';
 }
 
 function renderActions() {
@@ -785,9 +871,19 @@ function attach() {
     if (sellerItemSearch) focusSellerSearch();
   }
   bindSellerCatalogClicks();
-  root.querySelectorAll('.paid-card[data-payee]').forEach(card => {
-    card.onclick = () => openPaidModal(card.dataset.payee);
+  bindKindToggles(root, true);
+  root.querySelectorAll('.paid-kind-pills [data-paid-kind]').forEach(b => {
+    b.onclick = () => { paidKindFilter = b.dataset.paidKind || ''; render(); };
   });
+  const paidSearchEl = root.querySelector('.paid-search');
+  if (paidSearchEl) {
+    paidSearchEl.oninput = e => { paidSearch = e.target.value; render(); };
+    if (paidSearch) {
+      const pos = paidSearchEl.value.length;
+      paidSearchEl.focus();
+      paidSearchEl.setSelectionRange(pos, pos);
+    }
+  }
   const searchEl = root.querySelector('.purchase-search');
   if (searchEl) {
     searchEl.oninput = e => { purchaseSearch = e.target.value; render(); };
@@ -946,7 +1042,8 @@ function formBody(kind, p) {
       '<div class="receipt-total-row">' +
       '<div class="field"><label class="req">Total (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="' + esc(p.price) + '" placeholder="Grand total"></div>' +
       '<div class="field"><label class="req">Summary</label><input id="m-item" value="' + esc(p.item) + '" placeholder="AI writes a short label" autocomplete="off"></div></div>' +
-      '<div class="field wide" style="margin-top:12px"><label>Notes</label><input id="m-notes" value="' + esc(p.notes || '') + '" placeholder="Optional"></div>';
+      '<div class="field wide" style="margin-top:12px"><label>Notes</label><input id="m-notes" value="' + esc(p.notes || '') + '" placeholder="Optional"></div>' +
+      '<div class="field wide"><label>Counts as</label>' + kindToggleHtml('purchases', p.id || 'new', defaultSpendKind(p, 'purchases')) + '</div>';
   }
   if (kind === 'labour') {
     p = p || {payee: '', category: '', amount: '', date: todayStr(), method: 'cash', notes: '', photos: []};
@@ -963,7 +1060,8 @@ function formBody(kind, p) {
       '<div class="field"><label class="req">Amount (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-amount" value="' + esc(p.amount) + '" placeholder="e.g. 15000"></div>' +
       '<div class="field"><label>Date</label><input type="date" id="m-date" value="' + esc(p.date || todayStr()) + '"></div>' +
       '<div class="field"><label>Paid by</label>' + methodSelectHtml('m-method', p.method || 'cash') + '</div>' +
-      '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes || '') + '" placeholder="Optional"></div></div>';
+      '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes || '') + '" placeholder="Optional"></div>' +
+      '<div class="field wide"><label>Counts as</label>' + kindToggleHtml('labour', p.id || 'new', defaultSpendKind(p, 'labour')) + '</div></div>';
   }
   return '';
 }
@@ -1026,6 +1124,7 @@ function bindModal() {
   const ocr = $('m-ocr'); if (ocr) ocr.onclick = startReceiptScan;
   wireModelPicker('m-ai', 'm-ai-custom');
   bindLineTable();
+  bindKindToggles(modal, false);
   const pills = $('m-cat-pills');
   if (pills) pills.onclick = e => {
     const b = e.target.closest('.cat-pill');
@@ -1097,10 +1196,47 @@ function sellerRecordFromGroup(g, shared) {
   };
 }
 
+function readSpendKindFromForm(fallback) {
+  const lab = document.querySelector('[data-kind-set="labour"]');
+  const mat = document.querySelector('[data-kind-set="materials"]');
+  if (lab && lab.checked) return 'labour';
+  if (mat && mat.checked) return 'materials';
+  return fallback || 'materials';
+}
+
+function bindKindToggles(root, persistOnChange) {
+  if (!root) return;
+  root.querySelectorAll('[data-kind-set]').forEach(inp => {
+    inp.onchange = async () => {
+      const kind = inp.dataset.kindSet;
+      const group = inp.closest('.kind-toggle');
+      if (group) {
+        group.querySelectorAll('[data-kind-set]').forEach(other => {
+          const on = other.dataset.kindSet === kind;
+          other.checked = on;
+          const lbl = other.closest('.kind-check');
+          if (lbl) lbl.classList.toggle('on', on);
+        });
+      }
+      if (!persistOnChange) return;
+      const source = inp.dataset.source;
+      const id = inp.dataset.id;
+      if (!source || !id || id === 'new') return;
+      const rec = (state[source] || []).find(x => x.id === id);
+      if (!rec) return;
+      rec.spendKind = kind;
+      rec.updatedAt = new Date().toISOString();
+      await persist(source);
+      render();
+      if (settings.driveToken) scheduleCsvSync();
+    };
+  });
+}
+
 async function saveModal() {
   if (saveBusy) return;
   const k = session.editKind, val = id => { const el = $(id); return el ? el.value : ''; };
-  if (k === 'catalog-item' || k === 'shop-list' || k === 'paid-detail') return;
+  if (k === 'catalog-item' || k === 'shop-list') return;
   if (!k || !state[k]) return showErr('Could not save: invalid form state. Close and open again.');
   const editing = session.editing;
   setSaveBusy(true);
@@ -1219,6 +1355,7 @@ async function saveModal() {
       date: form.date || todayStr(),
       receipt: form.receipt,
       paymentMethod: val('m-method') || 'cash',
+      spendKind: readSpendKindFromForm('materials'),
       notes: val('m-notes').trim(),
       lines: form.lines,
       thumb
@@ -1277,6 +1414,7 @@ async function saveModal() {
       amount: +amt,
       date: val('m-date') || todayStr(),
       method: val('m-method') || 'cash',
+      spendKind: readSpendKindFromForm('labour'),
       notes: val('m-notes').trim()
     };
     const pending = pendingPhotos();
