@@ -1,6 +1,6 @@
 /** Plan vs spend: each payment is materials or labour (user can override on Paid tab). */
-import {state} from './store.js?v=20260819h';
-import {normalizeCategory, lineAmount, sumLines, purchaseCategories, purchasePayee, isBankName} from './util.js?v=20260819h';
+import {state} from './store.js?v=20260819i';
+import {normalizeCategory, lineAmount, sumLines, purchaseCategories, purchasePayee, isBankName} from './util.js?v=20260819i';
 
 export const PAY_METHODS = [
   {id: 'cash', label: 'Cash'},
@@ -14,8 +14,9 @@ export function payMethodLabel(id) {
 }
 
 export function purchaseTotal(p) {
-  const ls = sumLines(p && p.lines);
-  return ls || +p.price || 0;
+  const typed = p && p.price !== '' && p.price != null ? +p.price : NaN;
+  if (Number.isFinite(typed) && typed > 0) return typed;
+  return sumLines(p && p.lines) || 0;
 }
 
 export function labourTotal(row) { return +(row && row.amount) || 0; }

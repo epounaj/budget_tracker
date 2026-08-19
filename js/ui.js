@@ -1,21 +1,21 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819h';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260819h';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819h';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819h';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819i';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260819i';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819i';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819i';
 import {
   PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
   totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
   extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows,
   allPayments, labourPayments, labourBudgetPlanned, labourByTrade, labourByPayee, defaultSpendKind,
   materialsSpent, labourSpent
-} from './finance.js?v=20260819h';
-import {hub} from './hub.js?v=20260819h';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819h';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819h';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819h';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819h';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260819h';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260819h';
+} from './finance.js?v=20260819i';
+import {hub} from './hub.js?v=20260819i';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819i';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819i';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819i';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819i';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260819i';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260819i';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -1339,7 +1339,7 @@ function formBody(kind, p) {
       '<p class="field-hint receipt-table-label">Line items — AI fills this; tap a cell to correct.</p>' +
       purchaseLinesHtml(lines) +
       '<div class="receipt-total-row">' +
-      '<div class="field"><label class="req">Total (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="' + esc(p.price) + '" placeholder="Grand total"></div>' +
+      '<div class="field"><label class="req">Total (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-price" value="' + esc(p.price) + '" placeholder="Receipt grand total" data-locked="' + (p.price !== '' && p.price != null ? '1' : '0') + '"><p class="field-hint" id="m-price-hint">This total is saved even if AI misread the line items.</p></div>' +
       '<div class="field"><label class="req">Summary</label><input id="m-item" value="' + esc(p.item) + '" placeholder="AI writes a short label" autocomplete="off"></div></div>' +
       '<div class="field wide" style="margin-top:12px"><label>Notes</label><input id="m-notes" value="' + esc(p.notes || '') + '" placeholder="Optional"></div>' +
       '<div class="field wide"><label>Counts as</label>' + kindToggleHtml('purchases', p.id || 'new', defaultSpendKind(p, 'purchases')) + '</div>';

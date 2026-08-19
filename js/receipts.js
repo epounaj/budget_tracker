@@ -1,11 +1,11 @@
-import {settings, session} from './store.js?v=20260819h';
-import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame, isBankName, allTradeCategories} from './util.js?v=20260819h';
-import {CATEGORIES} from './config.js?v=20260819h';
-import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260819h';
-import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260819h';
-import {hub} from './hub.js?v=20260819h';
+import {settings, session} from './store.js?v=20260819i';
+import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame, isBankName, allTradeCategories} from './util.js?v=20260819i';
+import {CATEGORIES} from './config.js?v=20260819i';
+import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260819i';
+import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260819i';
+import {hub} from './hub.js?v=20260819i';
 
-export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260819h';
+export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260819i';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -228,6 +228,46 @@ export function readLinesFromTable() {
   }).filter(l => l.item || l.amount !== '' || l.seller);
 }
 
+function totalIsLocked() {
+  const el = $('m-price');
+  return !!(el && el.dataset.locked === '1');
+}
+
+function lockTotal() {
+  const el = $('m-price');
+  if (el) el.dataset.locked = '1';
+  refreshTotalHint();
+}
+
+function unlockTotal() {
+  const el = $('m-price');
+  if (el) el.dataset.locked = '0';
+}
+
+function refreshTotalHint() {
+  const hint = $('m-price-hint');
+  const totalEl = $('m-price');
+  if (!hint || !totalEl || tableHasSeller()) return;
+  const sum = sumLines(readLinesFromTable());
+  const typed = parseMoney(totalEl.value);
+  const rounded = Math.round(sum * 100) / 100;
+  if (!sum) {
+    hint.textContent = 'Type the receipt grand total here — it is what hits the budget, even if line items are wrong.';
+    return;
+  }
+  if (typed !== '' && Math.abs(Number(typed) - rounded) > 0.05) {
+    hint.innerHTML = 'Line items add up to <strong>' + rounded.toLocaleString() + '</strong> Rs. Total above is what gets saved. <button type="button" class="linkish" id="m-use-line-sum">Use line sum</button>';
+    const btn = $('m-use-line-sum');
+    if (btn) btn.onclick = () => {
+      totalEl.value = String(rounded);
+      unlockTotal();
+      refreshTotalHint();
+    };
+  } else {
+    hint.textContent = 'Matches line items. You can still type a different grand total if AI misread the rates.';
+  }
+}
+
 function syncTotalFromLines() {
   const totalEl = $('m-price');
   if (!totalEl) return;
@@ -237,7 +277,10 @@ function syncTotalFromLines() {
     if (names.size > 1) return;
   }
   const sum = sumLines(readLinesFromTable());
-  if (sum) totalEl.value = String(Math.round(sum * 100) / 100);
+  if (sum && !totalIsLocked() && !String(totalEl.value || '').trim()) {
+    totalEl.value = String(Math.round(sum * 100) / 100);
+  }
+  refreshTotalHint();
 }
 
 function fillSummaryFromLines() {
@@ -275,6 +318,13 @@ export function bindLineTable() {
       }
       tb.insertAdjacentHTML('beforeend', lineRowHtml(ln, tableHasCat()));
     };
+  }
+  const priceEl = $('m-price');
+  if (priceEl && !priceEl._totalBound) {
+    priceEl._totalBound = true;
+    priceEl.addEventListener('input', () => { lockTotal(); refreshTotalHint(); });
+    if (String(priceEl.value || '').trim()) priceEl.dataset.locked = priceEl.dataset.locked || '1';
+    refreshTotalHint();
   }
   if (!body || body._lineBound) return;
   body._lineBound = true;
@@ -384,8 +434,9 @@ export function applyOcrFields(raw, overwrite) {
   const manySellers = [...new Set((data.lines || []).map(l => l.seller).filter(Boolean))].length > 1;
   const sum = sumLines(data.lines);
   const total = data.total !== '' && data.total != null ? data.total : sum;
-  if (!manySellers && total !== '' && $('m-price') && (overwrite || !String($('m-price').value || '').trim())) {
+  if (!manySellers && total !== '' && $('m-price') && (overwrite || !String($('m-price').value || '').trim() || !totalIsLocked())) {
     $('m-price').value = total;
+    lockTotal();
     filled.push('total');
   }
   const summary = data.item || summarizePurchase(data.seller, data.lines);
@@ -703,8 +754,9 @@ export function readPurchaseForm() {
   const receipt = ($('m-receipt') && $('m-receipt').value.trim()) || '';
   const categories = readSelectedCategories();
   const category = categories[0] || '';
+  const typed = parseMoney($('m-price') && $('m-price').value);
   const lineSum = sumLines(lines);
-  let price = lineSum || parseMoney($('m-price') && $('m-price').value);
+  const price = (typed !== '' && typed != null) ? typed : lineSum;
   const item = (($('m-item') && $('m-item').value.trim()) || summarizePurchase(payee || seller, lines)).trim();
   return {lines, seller, payee, date, receipt, category, categories, price, item};
 }
