@@ -1,21 +1,21 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819g';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260819g';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819g';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819g';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819h';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260819h';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819h';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819h';
 import {
   PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
   totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
   extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows,
   allPayments, labourPayments, labourBudgetPlanned, labourByTrade, labourByPayee, defaultSpendKind,
   materialsSpent, labourSpent
-} from './finance.js?v=20260819g';
-import {hub} from './hub.js?v=20260819g';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819g';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819g';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819g';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819g';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260819g';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260819g';
+} from './finance.js?v=20260819h';
+import {hub} from './hub.js?v=20260819h';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819h';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819h';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819h';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819h';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260819h';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260819h';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -1004,12 +1004,16 @@ function renderPurchases() {
   filtered.sort((a, b) => {
     let va = a[sc] || '', vb = b[sc] || '';
     if (sc === 'price') return (((+va) || 0) - ((+vb) || 0)) * dir;
+    if (sc === 'seller') {
+      va = purchasePayee(a) || a.seller || '';
+      vb = purchasePayee(b) || b.seller || '';
+    }
     return String(va).localeCompare(String(vb)) * dir;
   });
 
   const arrow = col => '<span class="sort-arrow">' + (purchaseSort.col === col ? (purchaseSort.asc ? '▲' : '▼') : '') + '</span>';
   const thCls = col => purchaseSort.col === col ? ' class="sorted"' : '';
-  const cols = [['date','Date'],['item','Item'],['seller','Seller'],['category','Category'],['price','Total'],['paymentMethod','Paid by'],['receipt','Receipt #']];
+  const cols = [['date','Date'],['item','Item'],['seller','Paid to'],['category','Category'],['price','Total'],['paymentMethod','Paid by'],['receipt','Receipt #']];
 
   let rows = '';
   filtered.forEach(p => {
@@ -1017,7 +1021,7 @@ function renderPurchases() {
     rows += '<tr class="clickable" data-row-id="' + p.id + '">' +
       '<td>' + esc(p.date || '') + '</td>' +
       '<td class="item-cell">' + (p.thumb ? '<img src="' + p.thumb + '" class="thumb-sm" data-preview="purchase" data-id="' + p.id + '" alt="Receipt">' : '') + '<span>' + esc(p.item || '') + '</span></td>' +
-      '<td>' + esc(p.seller || '') + '</td>' +
+      '<td>' + esc(purchasePayee(p) || p.seller || '') + '</td>' +
       '<td>' + catChips(p) + '</td>' +
       '<td class="num tight">' + money(displayPrice) + '</td>' +
       '<td>' + esc(payMethodLabel(p.paymentMethod)) + '</td>' +
@@ -1042,7 +1046,8 @@ function renderPurchaseDetail(p) {
   let html = '';
   if (p.thumb) html += '<img src="' + p.thumb + '" class="detail-photo" data-preview="purchase" data-id="' + p.id + '" alt="Receipt">';
   html += '<dl class="detail-grid">';
-  html += '<dt>Seller</dt><dd>' + esc(p.seller || '—') + '</dd>';
+  html += '<dt>Paid to</dt><dd>' + esc(purchasePayee(p) || '—') + '</dd>';
+  html += '<dt>Receipt from</dt><dd>' + esc(p.seller || '—') + '</dd>';
   html += '<dt>Date</dt><dd>' + esc(p.date || '—') + '</dd>';
   html += '<dt>Category</dt><dd>' + catChips(p) + '</dd>';
   if (p.receipt) html += '<dt>Receipt #</dt><dd>' + esc(p.receipt) + '</dd>';
@@ -1528,7 +1533,13 @@ function bindKindToggles(root, persistOnChange) {
 
 async function saveModal() {
   if (saveBusy) return;
-  const k = session.editKind, val = id => { const el = $(id); return el ? el.value : ''; };
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  const modalEl = $('modal');
+  const val = id => {
+    const el = (modalEl && modalEl.querySelector('#' + id)) || $(id);
+    return el ? el.value : '';
+  };
+  const k = session.editKind;
   if (k === 'catalog-item' || k === 'shop-list') return;
   if (!k || !state[k]) return showErr('Could not save: invalid form state. Close and open again.');
   const editing = session.editing;
@@ -1635,6 +1646,9 @@ async function saveModal() {
     const form = readPurchaseForm();
     if (!form.item) return showErr('Enter a summary or at least one line item.');
     if (form.price === '' || !finiteNum(form.price) || +form.price < 0) return showErr('Enter a valid total amount.');
+    const payee = (val('m-payee') || form.payee || '').trim();
+    if (!payee) return showErr('Enter who you paid — not the bank (MCB/Juice).');
+    if (isBankName(payee)) return showErr('Paid to should be the person or company, not MCB/Juice.');
     const cat = form.category || '';
     const cats = (form.categories && form.categories.length) ? form.categories : (cat ? [cat] : []);
     const album = pendingPhotos();
@@ -1647,7 +1661,7 @@ async function saveModal() {
       category: cats[0] || '',
       categories: cats,
       seller: form.seller,
-      payee: val('m-payee').trim() || form.payee || form.seller,
+      payee,
       price: +form.price,
       date: form.date || todayStr(),
       receipt: form.receipt,
@@ -1703,6 +1717,7 @@ async function saveModal() {
     const cat = val('m-category').trim();
     const amt = val('m-amount');
     if (!payee) return showErr('Enter who you paid.');
+    if (isBankName(payee)) return showErr('Paid to should be the person or company, not MCB/Juice.');
     if (!cat) return showErr('Enter the trade (Plumbing, Electrical…).');
     if (!finiteNum(amt) || +amt < 0) return showErr('Enter a valid amount.');
     if (!state.labour) state.labour = [];

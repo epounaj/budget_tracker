@@ -1,4 +1,4 @@
-import {DB_NAME, DB_VERSION, STORES, TOKEN_KEY} from './config.js?v=20260819g';
+import {DB_NAME, DB_VERSION, STORES, TOKEN_KEY} from './config.js?v=20260819h';
 
 let db;
 export let state = {funds: [], budget: [], actions: [], sellers: [], purchases: [], labour: []};
@@ -74,8 +74,11 @@ export function mergeLedgers(preferred, other) {
       }
       const pT = Date.parse(row.updatedAt) || 0;
       const oT = Date.parse(prev.updatedAt) || 0;
-      if (oT && pT && oT > pT) continue;
-      map.set(id, Object.assign({}, row));
+      const keepPrev = oT && pT && oT > pT;
+      const next = Object.assign({}, keepPrev ? prev : row);
+      const donor = keepPrev ? row : prev;
+      if (!(String(next.payee || '').trim()) && String(donor.payee || '').trim()) next.payee = donor.payee;
+      map.set(id, next);
     }
     out[s] = Array.from(map.values());
   }
@@ -129,13 +132,28 @@ export function ledgerEmpty(ledger) {
   return ledgerRecordCount(ledger) === 0;
 }
 
+function cloneForIdb(row) {
+  try {
+    return JSON.parse(JSON.stringify(row));
+  } catch (e) {
+    const out = {};
+    Object.keys(row || {}).forEach(k => {
+      const v = row[k];
+      if (v == null || typeof v === 'function') return;
+      if (typeof Blob !== 'undefined' && v instanceof Blob) return;
+      try { JSON.stringify(v); out[k] = v; } catch (err) {}
+    });
+    return out;
+  }
+}
+
 export async function persist(store, opts) {
   opts = opts || {};
   await new Promise((res, rej) => {
     const t = db.transaction(store, 'readwrite');
     const os = t.objectStore(store);
     os.clear();
-    for (const row of (state[store] || [])) os.put(row);
+    for (const row of (state[store] || [])) os.put(cloneForIdb(row));
     t.oncomplete = () => res();
     t.onerror = () => rej(t.error);
   });
