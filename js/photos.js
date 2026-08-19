@@ -1,7 +1,8 @@
 /** Shared photo album + lightbox. Thumbs stay small; lightbox always prefers a full image. */
-import {settings, session, state} from './store.js?v=20260819e';
-import {$, esc, compressImage, extFromFile} from './util.js?v=20260819e';
-import {driveFetch} from './drive.js?v=20260819e';
+import {settings, session, state} from './store.js?v=20260819f';
+import {$, esc, compressImage, extFromFile} from './util.js?v=20260819f';
+import {driveFetch} from './drive.js?v=20260819f';
+import {hub} from './hub.js?v=20260819f';
 
 export const THUMB_MAX = 720;
 export const THUMB_Q = 0.82;
@@ -261,6 +262,8 @@ export function renderAlbumPreview() {
 
 export async function handlePhoto(file, append) {
   if (!file) return;
+  hub.setProcessing('Processing photo…');
+  try {
   if (!append) clearPendingPhoto();
   session.photoCleared = false;
   const isPdf = (file.type && file.type === 'application/pdf') || /\.pdf$/i.test(file.name || '');
@@ -285,6 +288,9 @@ export async function handlePhoto(file, append) {
   if (!session.pending || !Array.isArray(session.pending.photos)) session.pending = {photos: []};
   session.pending.photos.push(nextPhoto);
   renderAlbumPreview();
+  } finally {
+    hub.clearProcessing();
+  }
 }
 
 export function removePendingPhoto() {

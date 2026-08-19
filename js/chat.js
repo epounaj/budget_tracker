@@ -1,13 +1,13 @@
-import {settings, state} from './store.js?v=20260819e';
-import {$, esc, money, toast, lineAmount} from './util.js?v=20260819e';
-import {CUR} from './config.js?v=20260819e';
-import {hub} from './hub.js?v=20260819e';
-import {chatConfig} from './ai.js?v=20260819e';
+import {settings, state} from './store.js?v=20260819f';
+import {$, esc, money, toast, lineAmount} from './util.js?v=20260819f';
+import {CUR} from './config.js?v=20260819f';
+import {hub} from './hub.js?v=20260819f';
+import {chatConfig} from './ai.js?v=20260819f';
 import {
   purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn, totalSpent, inHand,
   extraNeeded, overdrawn, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan,
   spentMaterialsForCat, spentLabourForCat, totalPlan
-} from './finance.js?v=20260819e';
+} from './finance.js?v=20260819f';
 
 let history = [];
 

@@ -1,10 +1,11 @@
-import {settings, session} from './store.js?v=20260819e';
-import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame, isBankName, allTradeCategories} from './util.js?v=20260819e';
-import {CATEGORIES} from './config.js?v=20260819e';
-import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260819e';
-import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260819e';
+import {settings, session} from './store.js?v=20260819f';
+import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame, isBankName, allTradeCategories} from './util.js?v=20260819f';
+import {CATEGORIES} from './config.js?v=20260819f';
+import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260819f';
+import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260819f';
+import {hub} from './hub.js?v=20260819f';
 
-export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260819e';
+export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260819f';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -540,6 +541,7 @@ export async function runOCR(overwrite) {
   const btn = $('m-ocr');
   if (btn) btn.disabled = true;
   ocrStatus('Reading ' + photos.length + ' ' + noun + ' page' + (photos.length === 1 ? '' : 's') + ' with ' + (settings.provider === 'custom' ? (settings.model || 'custom model') : settings.provider) + '…', false);
+  hub.setProcessing('Reading receipt with AI…');
   try {
     const extra = isSeller
       ? 'This photo may be a supplier quote. Always fill "seller" and "contact" for THIS photo only. Different photos can be different shops.'
@@ -613,6 +615,7 @@ export async function runOCR(overwrite) {
     console.error(err);
     ocrStatus('Couldn\'t read ' + noun + ': ' + (err.message || 'error') + '. Keep the photo and fill the table yourself.', true);
   }
+  hub.clearProcessing();
   if (btn) btn.disabled = false;
 }
 

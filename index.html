@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#0E9F6E">
 <title>Site Ledger</title>
-<link rel="stylesheet" href="css/app.css?v=20260819e">
+<link rel="stylesheet" href="css/app.css?v=20260819f">
 </head>
 <body class="login-open">
 <div class="login-screen show" id="login-screen"><div class="login-card" id="login-card"></div></div>
@@ -28,6 +28,7 @@
     <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
     <button class="tab-btn" data-tab="funds">Funds</button>
     <button class="tab-btn" data-tab="budget">Budget</button>
+    <button class="tab-btn" data-tab="receipts">Receipts</button>
     <button class="tab-btn" data-tab="purchases">Purchases</button>
     <button class="tab-btn" data-tab="labour">Labour</button>
     <button class="tab-btn" data-tab="paid">Paid</button>
@@ -39,6 +40,15 @@
 
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 <div class="overlay" id="settings-overlay"><div class="modal" id="settings-modal"></div></div>
+<div class="overlay sheet-overlay" id="add-overlay"></div>
+<div class="overlay sheet-overlay" id="menu-overlay"></div>
+<div class="processing-overlay" id="processing-overlay">
+  <div class="processing-card">
+    <div class="processing-spinner" aria-hidden="true"></div>
+    <p class="processing-text" id="processing-text">Working…</p>
+    <p class="processing-hint">Please wait — don’t close the page</p>
+  </div>
+</div>
 <div class="lightbox" id="lightbox">
   <button class="lightbox-close" id="lightbox-close" aria-label="Close">&times;</button>
   <img id="lightbox-img" src="" alt="Preview">
@@ -48,6 +58,28 @@
   </div>
 </div>
 <button class="fab" id="fab-add" aria-label="Add new" title="Add">+</button>
+<nav class="bottom-nav" id="bottom-nav" aria-label="Main navigation">
+  <button type="button" class="bn-item active" data-tab="dashboard" aria-label="Home">
+    <svg viewBox="0 0 24 24"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>
+    <span>Home</span>
+  </button>
+  <button type="button" class="bn-item" data-tab="paid" aria-label="Paid">
+    <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    <span>Paid</span>
+  </button>
+  <button type="button" class="bn-item" data-tab="receipts" aria-label="Receipts">
+    <svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
+    <span>Receipts</span>
+  </button>
+  <button type="button" class="bn-item" data-tab="budget" aria-label="Budget">
+    <svg viewBox="0 0 24 24"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+    <span>Budget</span>
+  </button>
+  <button type="button" class="bn-item" data-tab="more" aria-label="More">
+    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+    <span>More</span>
+  </button>
+</nav>
 <div class="toast" id="toast"></div>
 
 <datalist id="category-options">
@@ -63,6 +95,6 @@
   <div class="chat-input-row"><input id="chat-input" placeholder="Ask about your budget…" autocomplete="off"><button id="chat-send" class="chat-send-btn">Send</button></div>
 </div>
 
-<script type="module" src="js/app.js?v=20260819e"></script>
+<script type="module" src="js/app.js?v=20260819f"></script>
 </body>
 </html>

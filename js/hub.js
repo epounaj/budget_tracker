@@ -6,4 +6,6 @@ export const hub = {
   showLogin() {},
   hideLogin() {},
   renderLogin() {},
+  setProcessing() {},
+  clearProcessing() {},
 };

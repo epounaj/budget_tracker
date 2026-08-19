@@ -1,21 +1,21 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819e';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260819e';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819e';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819e';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819f';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260819f';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819f';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819f';
 import {
   PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
   totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
   extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows,
   allPayments, labourPayments, labourBudgetPlanned, labourByTrade, labourByPayee, defaultSpendKind,
   materialsSpent, labourSpent
-} from './finance.js?v=20260819e';
-import {hub} from './hub.js?v=20260819e';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819e';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819e';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819e';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819e';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260819e';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260819e';
+} from './finance.js?v=20260819f';
+import {hub} from './hub.js?v=20260819f';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819f';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819f';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819f';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819f';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260819f';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260819f';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -23,6 +23,7 @@ let sellerCatalogPage = 1;
 let catalogCache = [];
 let shopListDraft = '';
 let saveBusy = false;
+let processingBusy = false;
 let paidSearch = '';
 let paidKindFilter = '';
 
@@ -814,10 +815,172 @@ function openShoppingListModal() {
     }
   });
 }
+function setProcessing(msg) {
+  processingBusy = true;
+  const ov = $('processing-overlay');
+  const txt = $('processing-text');
+  if (txt) txt.textContent = msg || 'Working…';
+  if (ov) ov.classList.add('show');
+  document.body.classList.add('processing-open');
+}
+
+function clearProcessing() {
+  processingBusy = false;
+  const ov = $('processing-overlay');
+  if (ov) ov.classList.remove('show');
+  document.body.classList.remove('processing-open');
+}
+
+function collectReceiptItems() {
+  const out = [];
+  (state.purchases || []).forEach(p => {
+    out.push({
+      kind: 'purchases', id: p.id, date: p.date || '', label: p.item || p.seller || 'Purchase',
+      sub: p.seller || purchasePayee(p) || '', amount: purchaseTotal(p), thumb: p.thumb || '',
+      preview: 'purchase', spendKind: defaultSpendKind(p, 'purchases')
+    });
+  });
+  (state.labour || []).forEach(p => {
+    out.push({
+      kind: 'labour', id: p.id, date: p.date || '', label: p.payee || 'Labour',
+      sub: p.category || p.notes || '', amount: labourTotal(p), thumb: p.thumb || '',
+      preview: 'labour', spendKind: defaultSpendKind(p, 'labour')
+    });
+  });
+  return out.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
+function renderReceipts() {
+  const q = receiptSearch.toLowerCase();
+  const items = collectReceiptItems().filter(r => {
+    if (!q) return true;
+    const blob = (r.label + ' ' + r.sub + ' ' + r.date + ' ' + r.kind).toLowerCase();
+    return blob.includes(q);
+  });
+  let html = head('Receipts', 'Every shop bill and labour proof — tap to view full size or edit.', 'purchases');
+  html += '<div class="purchase-toolbar">' +
+    '<input class="receipt-search" placeholder="Search receipts…" value="' + esc(receiptSearch) + '"></div>';
+  if (!items.length) {
+    html += empty('No receipts yet', 'Add a purchase or labour payment with a photo, or open Paid to see all payments.');
+    return html;
+  }
+  html += '<div class="receipt-grid">';
+  items.forEach(r => {
+    const kindLabel = r.kind === 'labour' ? 'Labour' : (r.spendKind === 'labour' ? 'Labour' : 'Materials');
+    html += '<article class="receipt-card" data-receipt-kind="' + r.kind + '" data-receipt-id="' + esc(r.id) + '">' +
+      '<div class="receipt-thumb-wrap">' +
+      (r.thumb
+        ? '<img src="' + esc(r.thumb) + '" class="receipt-thumb" data-preview="' + r.preview + '" data-id="' + esc(r.id) + '" alt="Receipt">'
+        : '<div class="receipt-thumb receipt-thumb-empty"><span>No photo</span></div>') +
+      '<span class="receipt-kind-badge">' + esc(kindLabel) + '</span></div>' +
+      '<div class="receipt-card-body">' +
+      '<p class="receipt-card-title">' + esc(r.label) + '</p>' +
+      '<p class="receipt-card-sub">' + esc(r.sub || r.date || '—') + '</p>' +
+      '<p class="receipt-card-amt">' + money(r.amount) + '</p>' +
+      '<div class="receipt-card-actions">' + actBtns(r.kind, r.id) + '</div></div></article>';
+  });
+  html += '</div>';
+  return html;
+}
+
+const ADD_OPTIONS = [
+  {kind: 'purchases', title: 'Shop purchase', sub: 'Receipt, Juice, or card — materials envelope', icon: 'receipt'},
+  {kind: 'labour', title: 'Labour payment', sub: 'Contractor pay — labour envelope', icon: 'labour'},
+  {kind: 'funds', title: 'Funds in', sub: 'Loan phase or own cash', icon: 'funds'},
+  {kind: 'budget', title: 'Budget line', sub: 'Plan materials or labour per trade', icon: 'budget'},
+  {kind: 'actions', title: 'Task', sub: 'Something still to do', icon: 'task'},
+  {kind: 'sellers', title: 'Seller quote', sub: 'Upload quote photos from shops', icon: 'seller'}
+];
+
+const ADD_ICONS = {
+  receipt: '<svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>',
+  labour: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  funds: '<svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+  budget: '<svg viewBox="0 0 24 24"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>',
+  task: '<svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  seller: '<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>'
+};
+
+function openAddPicker() {
+  const overlay = $('add-overlay');
+  if (!overlay) return;
+  overlay.innerHTML =
+    '<div class="sheet add-sheet" role="dialog" aria-label="Add">' +
+    '<div class="sheet-head"><p class="sheet-title">What are you adding?</p>' +
+    '<button type="button" class="sheet-close" id="add-close" aria-label="Close">&times;</button></div>' +
+    '<div class="add-options">' +
+    ADD_OPTIONS.map(o =>
+      '<button type="button" class="add-option" data-add-kind="' + o.kind + '">' +
+      '<span class="add-option-icon">' + (ADD_ICONS[o.icon] || '') + '</span>' +
+      '<span class="add-option-text"><span class="k">' + esc(o.title) + '</span><span class="s">' + esc(o.sub) + '</span></span></button>'
+    ).join('') +
+    '</div></div>';
+  overlay.classList.add('show');
+  const close = () => overlay.classList.remove('show');
+  const closeBtn = $('add-close');
+  if (closeBtn) closeBtn.onclick = close;
+  overlay.onclick = e => { if (e.target === overlay) close(); };
+  overlay.querySelectorAll('[data-add-kind]').forEach(btn => {
+    btn.onclick = () => {
+      const kind = btn.dataset.addKind;
+      close();
+      if (TITLES[kind]) openModal(kind, null);
+    };
+  });
+}
+
+function openMoreMenu() {
+  const overlay = $('menu-overlay');
+  if (!overlay) return;
+  const links = [
+    {tab: 'purchases', label: 'Purchases list'},
+    {tab: 'labour', label: 'Labour payments'},
+    {tab: 'funds', label: 'Funds'},
+    {tab: 'actions', label: 'Tasks'},
+    {tab: 'sellers', label: 'Sellers & quotes'}
+  ];
+  overlay.innerHTML =
+    '<div class="sheet menu-sheet" role="dialog" aria-label="More">' +
+    '<div class="sheet-head"><p class="sheet-title">More</p>' +
+    '<button type="button" class="sheet-close" id="menu-close" aria-label="Close">&times;</button></div>' +
+  '<div class="menu-links">' +
+    links.map(l => '<button type="button" class="menu-link" data-goto-tab="' + l.tab + '">' + esc(l.label) + '</button>').join('') +
+    '<button type="button" class="menu-link" id="menu-settings">Settings</button>' +
+    '</div></div>';
+  overlay.classList.add('show');
+  const close = () => overlay.classList.remove('show');
+  const closeBtn = $('menu-close');
+  if (closeBtn) closeBtn.onclick = close;
+  overlay.onclick = e => { if (e.target === overlay) close(); };
+  overlay.querySelectorAll('[data-goto-tab]').forEach(btn => {
+    btn.onclick = () => {
+      switchTab(btn.dataset.gotoTab);
+      close();
+    };
+  });
+  const setBtn = $('menu-settings');
+  if (setBtn) setBtn.onclick = () => {
+    close();
+    renderSettings();
+    const ov = $('settings-overlay');
+    if (ov) ov.classList.add('show');
+  };
+}
+
+function switchTab(tab) {
+  session.activeTab = tab;
+  localStorage.setItem('sl.tab', tab);
+  document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+  document.querySelectorAll('.bottom-nav [data-tab]').forEach(x => {
+    x.classList.toggle('active', x.dataset.tab === tab);
+  });
+  render();
+}
 let purchaseSort = {col: 'date', asc: false};
 let purchaseSearch = '';
 let purchaseCatFilter = '';
 let purchaseExpandedId = null;
+let receiptSearch = '';
 
 function renderPurchases() {
   if (!state.purchases.length) {
@@ -904,13 +1067,17 @@ export function render() {
   computeSummary();
   const root = $('panel-root');
   if (!root) return;
-  const renderer = {dashboard: renderDashboard, funds: renderFunds, budget: renderBudget, actions: renderActions, sellers: renderSellers, purchases: renderPurchases, labour: renderLabour, paid: renderPaid}[session.activeTab];
+  const renderer = {dashboard: renderDashboard, funds: renderFunds, budget: renderBudget, actions: renderActions, sellers: renderSellers, purchases: renderPurchases, labour: renderLabour, paid: renderPaid, receipts: renderReceipts}[session.activeTab];
   root.innerHTML = renderer ? renderer() : renderDashboard();
   refreshTradeDatalist();
   attach();
   updateSyncPill();
+  document.querySelectorAll('.bottom-nav [data-tab]').forEach(x => {
+    if (x.dataset.tab === 'more') return;
+    x.classList.toggle('active', x.dataset.tab === session.activeTab);
+  });
   const fab = $('fab-add');
-  if (fab) fab.style.display = session.activeTab === 'paid' ? 'none' : '';
+  if (fab) fab.style.display = '';
 }
 
 function attach() {
@@ -986,6 +1153,23 @@ function attach() {
   }
   const catEl = root.querySelector('.purchase-cat-filter');
   if (catEl) catEl.onchange = e => { purchaseCatFilter = e.target.value; render(); };
+  const receiptSearchEl = root.querySelector('.receipt-search');
+  if (receiptSearchEl) {
+    receiptSearchEl.oninput = e => { receiptSearch = e.target.value; render(); };
+    if (receiptSearch) {
+      const pos = receiptSearchEl.value.length;
+      receiptSearchEl.focus();
+      receiptSearchEl.setSelectionRange(pos, pos);
+    }
+  }
+  root.querySelectorAll('.receipt-card').forEach(card => {
+    card.onclick = e => {
+      if (e.target.closest('[data-edit],[data-del],[data-preview]')) return;
+      const k = card.dataset.receiptKind;
+      const r = state[k] && state[k].find(x => x.id === card.dataset.receiptId);
+      if (r) openModal(k, r);
+    };
+  });
   root.querySelectorAll('.purchase-table th[data-sort]').forEach(th => th.onclick = () => {
     const col = th.dataset.sort;
     if (purchaseSort.col === col) purchaseSort.asc = !purchaseSort.asc;
@@ -1295,7 +1479,8 @@ function sellerRecordFromGroup(g, shared) {
 }
 
 function readSpendKindFromForm(fallback) {
-  const on = document.querySelector('.kind-toggle .kind-btn.on[data-kind-set]');
+  const scope = $('modal') || document;
+  const on = scope.querySelector('.kind-toggle .kind-btn.on[data-kind-set]');
   if (on) return on.dataset.kindSet;
   return fallback || 'materials';
 }
@@ -1333,6 +1518,7 @@ async function saveModal() {
   if (!k || !state[k]) return showErr('Could not save: invalid form state. Close and open again.');
   const editing = session.editing;
   setSaveBusy(true);
+  setProcessing('Saving…');
   let obj;
   let extraSellers = [];
   let sellerBatchNote = '';
@@ -1437,8 +1623,9 @@ async function saveModal() {
     const cat = form.category || '';
     const cats = (form.categories && form.categories.length) ? form.categories : (cat ? [cat] : []);
     const album = pendingPhotos();
-    const firstPending = album[0] || null;
-    const thumb = session.photoCleared ? null : ((firstPending && firstPending.thumbDataUrl) || (session.editing ? session.editing.thumb : null) || null);
+    const uploadable = album.filter(ph => ph && ph.originalFile);
+    const firstPending = uploadable[0] || album[0] || null;
+    const thumb = session.photoCleared ? null : ((firstPending && (firstPending.thumbDataUrl || firstPending.thumb)) || (session.editing ? session.editing.thumb : null) || null);
     const summary = form.item || summarizePurchase(form.seller, form.lines);
     obj = {
       item: summary,
@@ -1450,7 +1637,7 @@ async function saveModal() {
       date: form.date || todayStr(),
       receipt: form.receipt,
       paymentMethod: val('m-method') || 'cash',
-      spendKind: readSpendKindFromForm('materials'),
+      spendKind: readSpendKindFromForm(defaultSpendKind(editing || {}, 'purchases')),
       notes: val('m-notes').trim(),
       lines: form.lines,
       thumb
@@ -1461,14 +1648,15 @@ async function saveModal() {
       const dup = state.purchases.find(x => x.id !== editId && (x.receipt || '').trim().toLowerCase() === rn && rn);
       if (dup && !confirm('Receipt #' + obj.receipt + ' already exists on ' + (dup.date || '?') + ' from ' + (dup.seller || '?') + '. Save anyway?')) return;
     }
-    if (album.length && settings.driveToken) {
+    if (uploadable.length && settings.driveToken) {
       try {
+        setProcessing('Uploading receipt photos…');
         const oldIds = [];
         if (session.editing && Array.isArray(session.editing.driveFileIds)) oldIds.push(...session.editing.driveFileIds.filter(Boolean));
         else if (session.editing && session.editing.driveFileId) oldIds.push(session.editing.driveFileId);
         for (const id of oldIds) await deleteDriveFile(id);
         const uploaded = [];
-        for (const ph of album) {
+        for (const ph of uploadable) {
           const link = await uploadOriginalToDrive(ph.originalFile, {
             item: obj.item, category: obj.category, seller: obj.seller, date: obj.date, receipt: obj.receipt, ext: ph.ext
           });
@@ -1484,7 +1672,7 @@ async function saveModal() {
       } catch (e) {
         return showErr('Could not upload receipt photos to Drive. Enable Drive API if needed, then tap Save again. The photos are still attached.');
       }
-    } else if (album.length && !settings.driveToken) {
+    } else if (uploadable.length && !settings.driveToken) {
       toast('Saved on this device. Sign in to keep the original photos in Drive.');
     } else if (session.photoCleared) {
       obj.driveLink = null; obj.driveFileId = null; obj.driveFolder = null; obj.driveFileIds = []; obj.driveFiles = [];
@@ -1509,15 +1697,17 @@ async function saveModal() {
       amount: +amt,
       date: val('m-date') || todayStr(),
       method: val('m-method') || 'cash',
-      spendKind: readSpendKindFromForm('labour'),
+      spendKind: readSpendKindFromForm(defaultSpendKind(editing || {}, 'labour')),
       notes: val('m-notes').trim()
     };
     const pending = pendingPhotos();
-    if (pending.length) {
+    const uploadable = pending.filter(ph => ph && ph.originalFile);
+    if (uploadable.length) {
       const links = [];
       if (settings.driveToken) {
         try {
-          for (const ph of pending) {
+          setProcessing('Uploading proof photos…');
+          for (const ph of uploadable) {
             const up = await uploadOriginalToDrive(ph.originalFile, {
               item: payee, category: cat, seller: payee, date: obj.date, receipt: 'labour', ext: ph.ext
             });
@@ -1530,8 +1720,8 @@ async function saveModal() {
         toast('Saved on this device. Sign in to keep the original photos in Drive.');
       }
       obj.photoLinks = links;
-      obj.photos = pending.map((ph, i) => persistablePhoto(ph, links[i]));
-      obj.thumb = (pending[0] && (pending[0].thumbDataUrl || pending[0].thumb)) || '';
+      obj.photos = uploadable.map((ph, i) => persistablePhoto(ph, links[i]));
+      obj.thumb = (uploadable[0] && (uploadable[0].thumbDataUrl || uploadable[0].thumb)) || (pending[0] && pending[0].thumb) || '';
       if (links[0]) {
         obj.driveLink = links[0].webViewLink;
         obj.driveFileId = links[0].id;
@@ -1564,6 +1754,7 @@ async function saveModal() {
     console.error(e);
     showErr(e && e.message ? e.message : 'Could not save. Please try again.');
   } finally {
+    clearProcessing();
     const overlay = $('overlay');
     if (overlay && overlay.classList.contains('show')) setSaveBusy(false);
     else saveBusy = false;
@@ -1718,17 +1909,18 @@ function syncChromeClasses() {
   };
   const body = document.body;
   if (!body) return;
-  body.classList.toggle('overlay-open', shown('overlay') || shown('settings-overlay'));
+  body.classList.toggle('overlay-open', shown('overlay') || shown('settings-overlay') || shown('add-overlay') || shown('menu-overlay'));
   body.classList.toggle('lightbox-open', shown('lightbox'));
   body.classList.toggle('login-open', shown('login-screen'));
   body.classList.toggle('chat-open', shown('chat-panel'));
+  body.classList.toggle('sheet-open', shown('add-overlay') || shown('menu-overlay'));
 }
 
 function watchChrome() {
   syncChromeClasses();
   if (typeof MutationObserver === 'undefined') return;
   const obs = new MutationObserver(syncChromeClasses);
-  ['overlay', 'settings-overlay', 'lightbox', 'login-screen', 'chat-panel'].forEach(id => {
+  ['overlay', 'settings-overlay', 'lightbox', 'login-screen', 'chat-panel', 'add-overlay', 'menu-overlay', 'processing-overlay'].forEach(id => {
     const el = $(id);
     if (el) obs.observe(el, {attributes: true, attributeFilter: ['class']});
   });
@@ -1739,13 +1931,17 @@ export function bindShell() {
   if (tabs) tabs.addEventListener('click', e => {
     const b = e.target.closest('.tab-btn');
     if (!b) return;
-    session.activeTab = b.dataset.tab;
-    localStorage.setItem('sl.tab', session.activeTab);
-    document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x.dataset.tab === session.activeTab));
-    render();
+    switchTab(b.dataset.tab);
+  });
+  const bottomNav = $('bottom-nav');
+  if (bottomNav) bottomNav.addEventListener('click', e => {
+    const b = e.target.closest('[data-tab]');
+    if (!b) return;
+    if (b.dataset.tab === 'more') openMoreMenu();
+    else switchTab(b.dataset.tab);
   });
   const overlay = $('overlay');
-  if (overlay) overlay.addEventListener('click', e => { if (e.target.id === 'overlay') closeModal(); });
+  if (overlay) overlay.addEventListener('click', e => { if (e.target.id === 'overlay' && !processingBusy) closeModal(); });
   bindLightboxShell();
   bindPhotoPreview(document);
   const openSettings = $('open-settings');
@@ -1767,10 +1963,9 @@ export function bindShell() {
     catch (e) { toast(e.message || 'Drive sync failed'); }
   });
   const fab = $('fab-add');
-  if (fab) fab.onclick = () => {
-    const k = session.activeTab === 'dashboard' ? 'purchases' : (session.activeTab === 'paid' ? 'labour' : session.activeTab);
-    if (TITLES[k]) openModal(k, null);
-  };
+  if (fab) fab.onclick = () => openAddPicker();
+  hub.setProcessing = setProcessing;
+  hub.clearProcessing = clearProcessing;
   watchChrome();
 }
 
