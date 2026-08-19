@@ -1,13 +1,13 @@
-import {settings, state} from './store.js?v=20260819i';
-import {$, esc, money, toast, lineAmount} from './util.js?v=20260819i';
-import {CUR} from './config.js?v=20260819i';
-import {hub} from './hub.js?v=20260819i';
-import {chatConfig} from './ai.js?v=20260819i';
+import {settings, state} from './store.js?v=20260819j';
+import {$, esc, money, toast, lineAmount} from './util.js?v=20260819j';
+import {CUR} from './config.js?v=20260819j';
+import {hub} from './hub.js?v=20260819j';
+import {chatConfig} from './ai.js?v=20260819j';
 import {
   purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn, totalSpent, inHand,
   extraNeeded, overdrawn, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan,
   spentMaterialsForCat, spentLabourForCat, totalPlan
-} from './finance.js?v=20260819i';
+} from './finance.js?v=20260819j';
 
 let history = [];
 
@@ -66,7 +66,7 @@ function localItemPriceAnswer(msg) {
     `Recent matches:\n${sample}`;
 }
 
-function buildSystemPrompt() {
+export function buildSystemPrompt() {
   const loan = loanReceived(), cash = ownCash(), fin = fundsIn();
   const spent = totalSpent(), avail = inHand(), extra = extraNeeded(), over = overdrawn(), plan = totalPlan();
 
@@ -277,3 +277,97 @@ export function initChat() {
   const openBtn = $('open-chat');
   if (openBtn) openBtn.onclick = openChat;
 }
+
+function insightFingerprint() {
+  return [totalSpent(), totalPlan(), fundsIn(), (state.purchases || []).length, (state.labour || []).length, (state.actions || []).length].join('|');
+}
+
+let insightCache = {key: '', data: null};
+
+export function localDashboardInsights() {
+  const spent = totalSpent(), plan = totalPlan(), avail = inHand(), extra = extraNeeded(), over = overdrawn();
+  const remain = Math.max(0, plan - spent);
+  const usedPct = plan > 0 ? Math.round(spent / plan * 100) : 0;
+  const cards = [];
+  if (over > 0) cards.push({tone: 'alert', title: 'Overdrawn', body: 'Spend exceeds funds in by ' + money(over) + '. Add a tranche or pause non-critical buys.'});
+  else if (remain > 0 && avail / remain < 0.1) cards.push({tone: 'alert', title: 'Cash is tight', body: 'In hand covers under 10% of remaining plan. Extra needed: ' + money(extra) + '.'});
+  else if (remain > 0 && avail / remain < 0.3) cards.push({tone: 'warn', title: 'Request the next tranche soon', body: 'In hand is 10–30% of remaining plan (' + money(remain) + ' left to spend).'});
+  else cards.push({tone: 'ok', title: 'Position looks healthy', body: 'In hand ' + money(avail) + ' · plan used ' + usedPct + '% · extra needed ' + money(extra) + '.'});
+
+  const overTrades = (state.budget || []).filter(b => {
+    const rem = budgetPlan(b) - spentMaterialsForCat(b.category) - spentLabourForCat(b.category);
+    return rem < 0;
+  });
+  if (overTrades.length) {
+    cards.push({tone: 'warn', title: overTrades.length + ' trade' + (overTrades.length === 1 ? '' : 's') + ' over plan', body: overTrades.slice(0, 3).map(b => b.category).join(', ') + ' — check labour vs materials tagging.'});
+  }
+  const pending = (state.actions || []).filter(a => a.status !== 'done');
+  if (pending.length) cards.push({tone: 'ok', title: pending.length + ' open task' + (pending.length === 1 ? '' : 's'), body: pending.slice(0, 3).map(a => a.title).join(' · ') || 'Review the Actions tab.'});
+  return {
+    headline: usedPct + '% of plan used · ' + money(avail) + ' in hand',
+    cards: cards.slice(0, 4),
+    source: 'local'
+  };
+}
+
+export function insightCardsHtml(data) {
+  const d = data || localDashboardInsights();
+  return '<div class="ai-headline">' + esc(d.headline || 'Site briefing') + '</div>' +
+    '<div class="ai-cards">' +
+    (d.cards || []).map(c =>
+      '<article class="ai-card ' + esc(c.tone || 'ok') + '"><p class="ai-k">' + esc(c.title || '') + '</p><p class="ai-b">' + esc(c.body || '') + '</p></article>'
+    ).join('') +
+    '</div>' +
+    '<p class="ai-source">' + (d.source === 'ai' ? 'Written from your ledger by AI' : (settings.apiKey ? 'Refreshing AI briefing…' : 'Local briefing — add an AI key in Settings for a written analysis')) + '</p>';
+}
+
+export async function loadDashboardInsights(force) {
+  const key = insightFingerprint();
+  if (!force && insightCache.key === key && insightCache.data) return insightCache.data;
+  const local = localDashboardInsights();
+  if (!settings.apiKey) {
+    insightCache = {key, data: local};
+    return local;
+  }
+  try {
+    const cfg = chatConfig();
+    const prompt = 'You are the Site Ledger analyst. Using ONLY the ledger snapshot, write a short briefing. Reply ONLY JSON: {"headline":string,"cards":[{"tone":"ok"|"warn"|"alert","title":string,"body":string}]}. 3 to 4 cards. headline max 90 chars. title max 40 chars. body max 140 chars. Be specific with Rs amounts and trade names. Flag over-budget trades, cash runway, and the next useful action.\n\n' + buildSystemPrompt();
+    const res = await fetch(cfg.url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', Authorization: cfg.auth},
+      body: JSON.stringify({
+        model: cfg.model,
+        messages: [{role: 'user', content: prompt}],
+        temperature: 0.3,
+        max_tokens: 700
+      })
+    });
+    if (!res.ok) throw new Error('API ' + res.status);
+    const json = await res.json();
+    const txt = (json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) || '';
+    const raw = String(txt).replace(/```json/gi, '').replace(/```/g, '').trim();
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    const parsed = JSON.parse(start >= 0 ? raw.slice(start, end + 1) : raw);
+    const cards = Array.isArray(parsed.cards) ? parsed.cards.slice(0, 4).map(c => ({
+      tone: /alert|warn|ok/.test(c.tone) ? c.tone : 'ok',
+      title: String(c.title || '').slice(0, 60),
+      body: String(c.body || '').slice(0, 220)
+    })) : local.cards;
+    const data = {headline: String(parsed.headline || local.headline).slice(0, 120), cards, source: 'ai'};
+    insightCache = {key, data};
+    return data;
+  } catch (e) {
+    insightCache = {key, data: Object.assign({}, local, {source: 'local'})};
+    return insightCache.data;
+  }
+}
+
+export async function mountDashboardInsights() {
+  const host = $('ai-briefing');
+  if (!host) return;
+  host.innerHTML = insightCardsHtml(insightCache.data || localDashboardInsights());
+  const data = await loadDashboardInsights(false);
+  if ($('ai-briefing') === host) host.innerHTML = insightCardsHtml(data);
+}
+

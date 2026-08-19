@@ -1,21 +1,22 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819i';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260819i';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819i';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819i';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819j';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260819j';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819j';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819j';
 import {
   PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
   totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
   extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows,
   allPayments, labourPayments, labourBudgetPlanned, labourByTrade, labourByPayee, defaultSpendKind,
   materialsSpent, labourSpent
-} from './finance.js?v=20260819i';
-import {hub} from './hub.js?v=20260819i';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819i';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819i';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819i';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819i';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260819i';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260819i';
+} from './finance.js?v=20260819j';
+import {hub} from './hub.js?v=20260819j';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819j';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819j';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819j';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819j';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260819j';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260819j';
+import {mountDashboardInsights, insightCardsHtml, localDashboardInsights, openChat} from './chat.js?v=20260819j';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -129,102 +130,90 @@ function spendInRange(from, to) {
   return shop + lab;
 }
 
+function ringSvg(pct) {
+  const p = Math.max(0, Math.min(100, pct || 0));
+  const r = 42;
+  const c = 2 * Math.PI * r;
+  const dash = c - (p / 100) * c;
+  return '<svg class="hero-ring" viewBox="0 0 108 108" aria-hidden="true">' +
+    '<circle cx="54" cy="54" r="' + r + '" class="ring-bg"/>' +
+    '<circle cx="54" cy="54" r="' + r + '" class="ring-fg' + (p > 100 ? ' over' : '') + '" stroke-dasharray="' + c.toFixed(1) + '" stroke-dashoffset="' + dash.toFixed(1) + '"/>' +
+    '<text x="54" y="50" text-anchor="middle" class="ring-pct">' + Math.round(p) + '%</text>' +
+    '<text x="54" y="66" text-anchor="middle" class="ring-lbl">plan used</text></svg>';
+}
+
 function renderDashboard() {
-  const loan = loanReceived(), cash = ownCash(), spent = totalSpent(), avail = inHand();
+  const spent = totalSpent(), avail = inHand();
   const plan = totalPlan(), extra = extraNeeded(), over = overdrawn();
-  const remainPlan = Math.max(0, plan - spent);
-
-  let html = '<div class="summary">' +
-    '<div class="avail-block"><div><p class="avail-label">In hand now</p>' +
-    '<p class="avail-value' + (avail < 0 ? ' negative' : '') + '" id="avail-value">' + money(avail) + '</p></div>' +
-    '<p class="avail-hint">Funds in − shop bills − labour payments</p></div>' +
-    financeStripHtml() +
-    '<div class="stat-grid">' +
-    '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--loan)"></span>Loan received</p><p class="stat-value" id="stat-loan" style="color:var(--loan)">' + money(loan) + '</p></div>' +
-    '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--ink-2)"></span>Own cash</p><p class="stat-value" id="stat-cash">' + money(cash) + '</p></div>' +
-    '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--spend)"></span>Spent</p><p class="stat-value" id="stat-spent" style="color:var(--spend)">' + money(spent) + '</p></div>' +
-    '<div class="stat-card"><p class="stat-label"><span class="stat-dot" style="background:var(--accent)"></span>Pending</p><p class="stat-value" id="stat-pending">' + state.actions.filter(a => a.status !== 'done').length + '</p></div>' +
-    '</div></div>';
-
-  const now = Date.now();
-  const d30 = now - 30 * 86400000;
-  const d60 = now - 60 * 86400000;
-  const spend30 = spendInRange(d30, now);
-  const spendPrev30 = spendInRange(d60, d30 - 1);
-  const trendPct = spendPrev30 > 0 ? ((spend30 - spendPrev30) / spendPrev30) * 100 : 0;
-  const catTotals = {};
-  (state.budget || []).forEach(b => {
-    const c = b.category || 'Uncategorized';
-    catTotals[c] = (catTotals[c] || 0) + spentMaterialsForCat(c) + spentLabourForCat(c);
-  });
-  (state.purchases || []).forEach(p => purchaseCategories(p).forEach(c => {
-    if (catTotals[c] == null) catTotals[c] = spentMaterialsForCat(c) + spentLabourForCat(c);
-  }));
-  (state.labour || []).forEach(p => {
-    const c = p.category || 'Uncategorized';
-    if (catTotals[c] == null) catTotals[c] = spentMaterialsForCat(c) + spentLabourForCat(c);
-  });
-  const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
+  const remainPlan = plan - spent;
+  const usedPct = plan > 0 ? (spent / plan) * 100 : 0;
+  const matS = materialsSpent(), labS = labourSpent();
   const payees = paidToRows();
-  const topPayee = payees[0];
-  html += '<div class="dash-section"><p class="dash-title">Smart insights</p><div class="insights-grid">' +
-    '<div class="insight-card"><p class="k">30d spend</p><p class="v">' + money(spend30) + '</p></div>' +
-    '<div class="insight-card"><p class="k">30d trend</p><p class="v ' + (trendPct > 0 ? 'bad' : 'good') + '">' + (spendPrev30 ? ((trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '%') : '—') + '</p></div>' +
-    '<div class="insight-card"><p class="k">Top trade</p><p class="v">' + esc(topCat ? topCat[0] : '—') + '</p><p class="s">' + money(topCat ? topCat[1] : 0) + '</p></div>' +
-    '<div class="insight-card"><p class="k">Top payee</p><p class="v">' + esc(topPayee ? topPayee.name : '—') + '</p><p class="s">' + money(topPayee ? topPayee.total : 0) + '</p></div>' +
-    '</div></div>';
+  const payments = allPayments().slice(0, 8);
+  const pendingN = state.actions.filter(a => a.status !== 'done').length;
 
-  html += '<div class="dash-section"><p class="dash-title">Fund health</p>';
-  if (over > 0) {
-    html += '<div class="alert-card red"><p class="alert-title">Overdrawn</p><p class="alert-body">Spent ' + money(over) + ' more than funds in. Add a loan tranche or own cash.</p></div>';
-  } else if (remainPlan > 0) {
-    const ratio = avail / remainPlan;
-    if (ratio > 0.3) html += '<div class="alert-card green"><p class="alert-title">Funds healthy</p><p class="alert-body">In hand covers more than 30% of the remaining plan.</p></div>';
-    else if (ratio >= 0.1) html += '<div class="alert-card yellow"><p class="alert-title">Running low — request next tranche soon</p><p class="alert-body">In hand is 10–30% of remaining plan (' + money(remainPlan) + ' left to spend).</p></div>';
-    else html += '<div class="alert-card red"><p class="alert-title">Funds critical — request disbursement now</p><p class="alert-body">In hand is below 10% of remaining plan. Extra needed: ' + money(extra) + '.</p></div>';
-  } else if (spent > 0) {
-    html += '<div class="alert-card green"><p class="alert-title">Plan covered</p><p class="alert-body">Spend is within the planned total. Extra needed: ' + money(extra) + '.</p></div>';
-  } else {
-    html += '<div class="alert-card green"><p class="alert-title">Funds healthy</p><p class="alert-body">No spending recorded yet.</p></div>';
-  }
-  const avgDaily = spend30 / 30;
-  if (avgDaily > 0) {
-    const runwayDays = Math.round(Math.max(0, avail) / avgDaily);
-    const next30 = Math.round(avgDaily * 30);
-    html += '<div class="alert-card green"><p class="alert-title">Projected runway</p>' +
-      '<p class="alert-body">At current spending rate, funds last ~' + runwayDays + ' more days.</p></div>' +
-      '<div class="alert-card green"><p class="alert-title">Next disbursement suggestion</p>' +
-      '<p class="alert-body">Request ' + money(next30) + ' to cover next 30 days based on average spending.</p></div>';
-  }
-  html += '</div>';
+  let html = '<div class="hero">' +
+    '<div class="hero-main">' +
+    '<p class="hero-k">In hand</p>' +
+    '<p class="hero-v' + (avail < 0 ? ' neg' : '') + '">' + money(avail) + '</p>' +
+    '<p class="hero-s">Funds in − materials − labour</p>' +
+    '<div class="hero-pills">' +
+    '<span class="hero-pill">Plan ' + money(plan) + '</span>' +
+    '<span class="hero-pill spend">Spent ' + money(spent) + '</span>' +
+    '<span class="hero-pill' + (extra > 0 ? ' warn' : '') + '">Extra ' + money(extra) + '</span>' +
+    '</div></div>' +
+    '<div class="hero-side">' + ringSvg(usedPct) + '</div></div>';
+
+  html += '<div class="metric-row">' +
+    '<div class="metric"><p class="k">Materials</p><p class="v">' + money(matS) + '</p></div>' +
+    '<div class="metric"><p class="k">Labour</p><p class="v">' + money(labS) + '</p></div>' +
+    '<div class="metric"><p class="k">Remaining plan</p><p class="v ' + (remainPlan < 0 ? 'bad' : '') + '">' + money(remainPlan) + '</p></div>' +
+    '<div class="metric"><p class="k">Open tasks</p><p class="v">' + pendingN + '</p></div></div>';
+
+  html += '<div class="dash-section ai-section">' +
+    '<div class="dash-head-row"><p class="dash-title">AI briefing</p>' +
+    '<button type="button" class="ghost-btn" id="ask-ai">Ask the assistant</button></div>' +
+    '<div id="ai-briefing">' + insightCardsHtml(localDashboardInsights()) + '</div></div>';
 
   if (state.budget.length) {
-    html += '<div class="dash-section"><p class="dash-title">Budget vs Actual</p><table class="dash-table"><thead><tr>' +
-      '<th>Trade</th><th>Materials</th><th>Labour</th><th>Plan</th><th>Spent</th><th>Remaining</th></tr></thead><tbody>';
-    state.budget.forEach(b => {
-      const matP = budgetMaterialsPlanned(b), labP = budgetLabourPlanned(b);
-      const matS = spentMaterialsForCat(b.category), labS = spentLabourForCat(b.category);
-      const bud = budgetPlan(b), sp = matS + labS, rem = bud - sp;
-      const overRow = rem < 0;
-      html += '<tr><td>' + esc(b.category) + '</td>' +
-        '<td class="dash-stat">' + money(matS) + ' / ' + money(matP) + '</td>' +
-        '<td class="dash-stat">' + money(labS) + ' / ' + money(labP) + '</td>' +
-        '<td class="dash-stat">' + money(bud) + '</td>' +
-        '<td class="dash-stat">' + money(sp) + '</td>' +
-        '<td class="dash-stat" style="color:' + (rem < 0 ? 'var(--spend)' : 'var(--accent)') + '">' + money(rem) +
-        (overRow ? ' <span class="over-badge">OVER</span>' : '') + '</td></tr>';
+    html += '<div class="dash-section"><p class="dash-title">Budget pulse</p><div class="pulse-list">';
+    state.budget.slice(0, 8).forEach(b => {
+      const bud = budgetPlan(b), sp = spentMaterialsForCat(b.category) + spentLabourForCat(b.category);
+      const rem = bud - sp;
+      const w = bud > 0 ? Math.min(100, sp / bud * 100) : (sp ? 100 : 0);
+      html += '<div class="pulse-row"><div class="pulse-top"><span>' + esc(b.category) + '</span>' +
+        '<strong class="' + (rem < 0 ? 'bad' : '') + '">' + money(sp) + '<em> / ' + money(bud) + '</em></strong></div>' +
+        '<div class="pulse-bar"><span class="' + (rem < 0 ? 'over' : '') + '" style="width:' + w + '%"></span></div></div>';
     });
-    html += '</tbody></table></div>';
+    html += '</div></div>';
+  }
+
+  html += '<div class="dash-section"><p class="dash-title">Recent activity</p>';
+  if (!payments.length) {
+    html += empty('Nothing logged yet', 'Add a purchase or labour payment to start the timeline.');
+  } else {
+    html += '<div class="mini-timeline">';
+    payments.forEach(p => {
+      html += '<button type="button" class="tl-item" data-edit="' + p.source + '" data-id="' + esc(p.id) + '">' +
+        '<span class="tl-dot ' + (p.spendKind === 'labour' ? 'lab' : 'mat') + '"></span>' +
+        '<span class="tl-when">' + esc(p.date || '—') + '</span>' +
+        '<span class="tl-who">' + esc(p.payee || p.label || '—') + '</span>' +
+        '<span class="tl-amt">' + money(p.amount) + '</span></button>';
+    });
+    html += '</div></div>';
   }
 
   if (payees.length) {
-    html += '<div class="dash-section"><p class="dash-title">Top payees</p><table class="dash-table"><thead><tr><th>Payee</th><th>Materials</th><th>Labour</th><th>Total</th></tr></thead><tbody>';
-    payees.slice(0, 5).forEach(row => {
-      html += '<tr><td>' + esc(row.name) + '</td><td class="dash-stat">' + money(row.materials) + '</td><td class="dash-stat">' + money(row.labour) + '</td><td class="dash-stat">' + money(row.total) + '</td></tr>';
+    html += '<div class="dash-section"><p class="dash-title">Top payees</p><div class="payee-pills">';
+    payees.slice(0, 6).forEach(row => {
+      html += '<div class="payee-pill"><span>' + esc(row.name) + '</span><strong>' + money(row.total) + '</strong></div>';
     });
-    html += '</tbody></table></div>';
+    html += '</div></div>';
   }
 
+  if (over > 0) {
+    html += '<p class="dash-foot-note">Already overdrawn ' + money(over) + ' versus funds in.</p>';
+  }
   return html;
 }
 
@@ -1103,6 +1092,11 @@ export function render() {
 function attach() {
   const root = $('panel-root');
   if (!root) return;
+  if (session.activeTab === 'dashboard') {
+    mountDashboardInsights();
+    const ask = $('ask-ai');
+    if (ask) ask.onclick = () => openChat();
+  }
   root.querySelectorAll('[data-add]').forEach(b => b.onclick = () => openModal(b.dataset.add, null));
   root.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => {
     const k = b.dataset.edit;
