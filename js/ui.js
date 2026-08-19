@@ -1,21 +1,21 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819d';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260819d';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819d';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819d';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819e';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260819e';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819e';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819e';
 import {
   PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
   totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
   extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows,
   allPayments, labourPayments, labourBudgetPlanned, labourByTrade, labourByPayee, defaultSpendKind,
   materialsSpent, labourSpent
-} from './finance.js?v=20260819d';
-import {hub} from './hub.js?v=20260819d';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819d';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819d';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819d';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819d';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260819d';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260819d';
+} from './finance.js?v=20260819e';
+import {hub} from './hub.js?v=20260819e';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819e';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819e';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819e';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819e';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260819e';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260819e';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -1142,12 +1142,15 @@ function formBody(kind, p) {
   }
   if (kind === 'labour') {
     p = p || {payee: '', category: '', amount: '', date: todayStr(), method: 'cash', notes: '', photos: []};
+    const hasKey = !!settings.apiKey;
     const photos = existingFormPhotos(p, 'labour');
     return photoFieldHtml({
-      photos, hasKey: false, skipOcr: true,
+      photos, hasKey,
       kind: 'labour', recordId: p.id || '', alt: 'Proof',
       accept: 'image/*,application/pdf',
-      hint: 'Cash receipt, Juice screenshot/PDF, or MCB card transaction. No AI scan — just attach proof.'
+      hint: 'Cash receipt, Juice screenshot/PDF, or MCB transfer. AI reads paid to, trade, amount, and date.',
+      ocrLabel: hasKey ? 'Re-scan with AI' : 'Scan with AI',
+      extraHtml: hasKey ? '' : inlineAiHtml()
     }) +
       '<div class="form-grid">' +
       '<div class="field"><label class="req">Paid to</label><input id="m-payee" value="' + esc(p.payee) + '" placeholder="Plumber, electrician…" autocomplete="off"></div>' +
@@ -1173,7 +1176,7 @@ export function openModal(kind, rec) {
     actions: 'One thing still to do. Due date is optional.',
     sellers: 'Snap or pick quote photos. Each photo can be a different shop — AI fills name, contact, and lines.',
     purchases: 'Shop bill: cash receipt, Juice screenshot, or MCB card. AI fills items. Hits the materials envelope.',
-    labour: 'Contractor pay: who, trade, amount, cash/card/Juice, and a photo of the proof.'
+    labour: 'Contractor pay: snap or upload proof — AI fills paid to, trade, amount, and date. Cash, Juice, or MCB transfer.'
   }[kind];
   const modal = $('modal');
   const overlay = $('overlay');
@@ -1215,7 +1218,7 @@ function bindModal() {
     e.preventDefault();
     saveModal();
   };
-  bindAlbumControls(modal, (session.editKind === 'purchases' || session.editKind === 'sellers') ? maybeScanAfterPhoto : null);
+  bindAlbumControls(modal, (session.editKind === 'purchases' || session.editKind === 'sellers' || session.editKind === 'labour') ? maybeScanAfterPhoto : null);
   const ocr = $('m-ocr'); if (ocr) ocr.onclick = startReceiptScan;
   wireModelPicker('m-ai', 'm-ai-custom');
   bindLineTable();

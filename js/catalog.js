@@ -1,11 +1,11 @@
 /** Unified shop catalog from seller quotes + purchase lines. */
-import {CATEGORIES} from './config.js?v=20260819d';
-import {settings, state} from './store.js?v=20260819d';
+import {CATEGORIES} from './config.js?v=20260819e';
+import {settings, state} from './store.js?v=20260819e';
 import {
   itemHaystack, itemsLookSame, itemMatchScore, guessCategoryFromItem, normalizeCategory,
   lineAmount, unitPrice, purchaseCategories
-} from './util.js?v=20260819d';
-import {callJsonCompletion} from './ai.js?v=20260819d';
+} from './util.js?v=20260819e';
+import {callJsonCompletion} from './ai.js?v=20260819e';
 
 export const CATALOG_PAGE_SIZE = 10;
 

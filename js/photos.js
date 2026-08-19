@@ -1,7 +1,7 @@
 /** Shared photo album + lightbox. Thumbs stay small; lightbox always prefers a full image. */
-import {settings, session, state} from './store.js?v=20260819d';
-import {$, esc, compressImage, extFromFile} from './util.js?v=20260819d';
-import {driveFetch} from './drive.js?v=20260819d';
+import {settings, session, state} from './store.js?v=20260819e';
+import {$, esc, compressImage, extFromFile} from './util.js?v=20260819e';
+import {driveFetch} from './drive.js?v=20260819e';
 
 export const THUMB_MAX = 720;
 export const THUMB_Q = 0.82;

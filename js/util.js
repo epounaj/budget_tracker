@@ -1,5 +1,5 @@
-import {CATEGORIES, CUR} from './config.js?v=20260819d';
-import {state, settings} from './store.js?v=20260819d';
+import {CATEGORIES, CUR} from './config.js?v=20260819e';
+import {state, settings} from './store.js?v=20260819e';
 
 export const $ = id => document.getElementById(id);
 export const todayStr = () => new Date().toISOString().slice(0, 10);

@@ -1,10 +1,10 @@
-import {settings, session} from './store.js?v=20260819d';
-import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame, isBankName, allTradeCategories} from './util.js?v=20260819d';
-import {CATEGORIES} from './config.js?v=20260819d';
-import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260819d';
-import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260819d';
+import {settings, session} from './store.js?v=20260819e';
+import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame, isBankName, allTradeCategories} from './util.js?v=20260819e';
+import {CATEGORIES} from './config.js?v=20260819e';
+import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260819e';
+import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260819e';
 
-export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260819d';
+export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260819e';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -15,7 +15,9 @@ export function ocrStatus(msg, err) {
 }
 
 function photoNoun() {
-  return session.editKind === 'sellers' ? 'quote' : 'receipt';
+  if (session.editKind === 'sellers') return 'quote';
+  if (session.editKind === 'labour') return 'payment proof';
+  return 'receipt';
 }
 
 function emptyLine() { return {item: '', qty: '', rate: '', amount: '', category: '', seller: '', contact: ''}; }
@@ -304,9 +306,44 @@ export function bindLineTable() {
   });
 }
 
+function applyLabourOcrFields(data, overwrite) {
+  const set = (id, v) => {
+    const el = $(id);
+    if (!el || v == null || v === '') return false;
+    if (overwrite || !String(el.value || '').trim()) { el.value = v; return true; }
+    return false;
+  };
+  const filled = [];
+  const payee = inferPayeeFromOcr(data);
+  if (set('m-payee', payee)) filled.push('paid to');
+  let cat = data.category || (data.categories && data.categories[0]) || '';
+  if (!cat && data.item) cat = guessCategoryFromItem(data.item, {allowed: allTradeCategories()});
+  if (!cat && data.lines && data.lines[0]) {
+    cat = data.lines[0].category || guessCategoryFromItem(data.lines[0].item, {allowed: allTradeCategories()});
+  }
+  if (set('m-category', cat)) filled.push('trade');
+  if (data.date) {
+    const dEl = $('m-date');
+    if (dEl && (overwrite || !String(dEl.value || '').trim())) { dEl.value = data.date; filled.push('date'); }
+  }
+  if (isBankName(data.seller)) {
+    const mEl = $('m-method');
+    if (mEl && (overwrite || !String(mEl.value || '').trim())) {
+      mEl.value = /juice/i.test(String(data.seller)) ? 'juice' : 'card';
+      filled.push('paid by');
+    }
+  }
+  const total = data.total !== '' && data.total != null ? data.total : sumLines(data.lines);
+  if (total !== '' && set('m-amount', total)) filled.push('amount');
+  const notes = data.item || summarizePurchase(data.seller, data.lines);
+  if (notes && set('m-notes', notes)) filled.push('notes');
+  return {data, filled};
+}
+
 export function applyOcrFields(raw, overwrite) {
   const data = normalizeOcr(raw);
   if (!data) return null;
+  if (session.editKind === 'labour') return applyLabourOcrFields(data, overwrite);
   const set = (id, v) => {
     const el = $(id);
     if (!el || v == null || v === '') return false;
@@ -498,6 +535,7 @@ export async function runOCR(overwrite) {
   const photos = pendingPhotos();
   const noun = photoNoun();
   const isSeller = session.editKind === 'sellers';
+  const isLabour = session.editKind === 'labour';
   if (!photos.length) { ocrStatus('Take or upload a ' + noun + ' photo first.', true); return; }
   const btn = $('m-ocr');
   if (btn) btn.disabled = true;
@@ -505,7 +543,9 @@ export async function runOCR(overwrite) {
   try {
     const extra = isSeller
       ? 'This photo may be a supplier quote. Always fill "seller" and "contact" for THIS photo only. Different photos can be different shops.'
-      : '';
+      : isLabour
+        ? 'This is a contractor/labour payment proof — cash receipt, service invoice, or MCB/Juice/bank transfer screenshot. "seller" = contractor or person who received the payment (Transfer to / Paid to / Beneficiary), NEVER the bank name. "summary" = work paid for (e.g. foundation pour, plumbing rough-in). "category" = construction trade. "total" = amount paid. Use one line in "lines" if there is no itemized breakdown.'
+        : '';
     const merged = {seller: '', contact: '', date: '', receipt: '', category: '', categories: [], total: '', item: '', lines: []};
     for (let i = 0; i < photos.length; i++) {
       const ph = photos[i];
@@ -554,8 +594,15 @@ export async function runOCR(overwrite) {
     if (!merged.item) merged.item = summarizePurchase(merged.seller, merged.lines);
     const result = applyOcrFields(merged, !!overwrite);
     const n = result && result.data && result.data.lines ? result.data.lines.length : 0;
-    const who = ($('m-seller') && $('m-seller').value) || ($('m-name') && $('m-name').value) || ('the ' + noun);
-    if (!n && !($('m-seller') && $('m-seller').value) && !($('m-name') && $('m-name').value) && !sellerNames.length && !($('m-price') && $('m-price').value)) {
+    const who = ($('m-seller') && $('m-seller').value) || ($('m-name') && $('m-name').value) || ($('m-payee') && $('m-payee').value) || ('the ' + noun);
+    if (isLabour) {
+      const amt = $('m-amount') && $('m-amount').value;
+      if (!($('m-payee') && $('m-payee').value) && !amt) {
+        ocrStatus('AI could not read this payment proof. Fill the fields yourself, or tap Re-scan.', true);
+      } else {
+        ocrStatus('Filled from ' + who + (amt ? (' · ' + amt + ' Rs') : '') + '. Correct anything that’s wrong, then Save.', false);
+      }
+    } else if (!n && !($('m-seller') && $('m-seller').value) && !($('m-name') && $('m-name').value) && !sellerNames.length && !($('m-price') && $('m-price').value)) {
       ocrStatus('AI could not read line items from these photos. Type them into the table, or tap Re-scan.', true);
     } else if (isSeller && sellerNames.length > 1) {
       ocrStatus('Found ' + sellerNames.length + ' shops in ' + photos.length + ' photos · ' + n + ' line' + (n === 1 ? '' : 's') + '. Name and contact are on each row. Save creates one seller per shop.', false);
