@@ -1,4 +1,5 @@
-import {CATEGORIES, CUR} from './config.js?v=20260819c';
+import {CATEGORIES, CUR} from './config.js?v=20260819d';
+import {state, settings} from './store.js?v=20260819d';
 
 export const $ = id => document.getElementById(id);
 export const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -278,4 +279,18 @@ export function purchasePayee(p) {
   const notes = String(p.notes || '').trim();
   if (notes && !isBankName(notes)) return notes;
   return seller || '';
+}
+
+/** Default + custom + budget trades — for datalists and pills. */
+export function allTradeCategories() {
+  const set = new Set(CATEGORIES);
+  (settings.tradeCategories || []).forEach(c => { if (c && String(c).trim()) set.add(String(c).trim()); });
+  (state.budget || []).forEach(b => { if (b.category && String(b.category).trim()) set.add(String(b.category).trim()); });
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+export function refreshTradeDatalist() {
+  const dl = document.getElementById('category-options');
+  if (!dl) return;
+  dl.innerHTML = allTradeCategories().map(c => '<option value="' + esc(c) + '">').join('');
 }

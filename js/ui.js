@@ -1,21 +1,21 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819c';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260819c';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName} from './util.js?v=20260819c';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819c';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819d';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260819d';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem, purchasePayee, isBankName, allTradeCategories, refreshTradeDatalist} from './util.js?v=20260819d';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819d';
 import {
   PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
   totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
   extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows,
   allPayments, labourPayments, labourBudgetPlanned, labourByTrade, labourByPayee, defaultSpendKind,
   materialsSpent, labourSpent
-} from './finance.js?v=20260819c';
-import {hub} from './hub.js?v=20260819c';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819c';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819c';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819c';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819c';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260819c';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260819c';
+} from './finance.js?v=20260819d';
+import {hub} from './hub.js?v=20260819d';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819d';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819d';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819d';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819d';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260819d';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260819d';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -250,10 +250,21 @@ function budgetSpendCell(spent, planned) {
     (planned > 0 ? '<span class="cell-plan">/ ' + money(planned) + '</span>' : (noPlan ? ' <span class="over-badge">NO PLAN</span>' : ''));
 }
 
+function registerTradeCategory(name) {
+  const c = String(name || '').trim();
+  if (!c || CATEGORIES.includes(c)) return;
+  if (!settings.tradeCategories) settings.tradeCategories = [];
+  if (!settings.tradeCategories.includes(c)) {
+    settings.tradeCategories.push(c);
+    saveSettings();
+  }
+}
+
 function renderBudget() {
   if (!state.budget.length) {
-    return head('Budget by trade', 'Plan materials and labour per trade. Shop bills hit materials; contractor payments hit labour.', 'budget') +
-      empty('No budget trades yet', 'Add Plumbing, Electrical, Foundation… with materials and labour amounts.');
+    refreshTradeDatalist();
+    return head('Budget by trade', 'Your trade template: one row per part of the build. Materials or labour can be 0.', 'budget') +
+      empty('No trades yet', 'Tap + Add to create Plumbing, Foundation, Electrical… Set materials and/or labour planned (0 is ok).');
   }
 
   const plan = totalPlan();
@@ -337,7 +348,8 @@ function renderBudget() {
       '<td><div class="row-actions">' + actBtns('budget', b.id) + '</div></td></tr>';
   }).join('');
 
-  html += '<div class="dash-section"><p class="dash-title">All trades</p>' +
+  html += '<div class="dash-section"><p class="dash-title">Trade template</p>' +
+    '<p class="panel-desc" style="margin:-6px 0 10px">One row per trade. Materials or labour can be <strong>0</strong> if not needed. Tap + Add to create a row, or edit/delete here.</p>' +
     '<div class="purchase-table-wrap"><table class="purchase-table budget-table"><thead><tr>' +
     '<th>Trade</th><th>Materials</th><th>Labour</th><th class="num">Plan</th><th class="num">Remaining</th><th>Actions</th>' +
     '</tr></thead><tbody>' + tableRows + '</tbody></table></div></div>';
@@ -894,6 +906,7 @@ export function render() {
   if (!root) return;
   const renderer = {dashboard: renderDashboard, funds: renderFunds, budget: renderBudget, actions: renderActions, sellers: renderSellers, purchases: renderPurchases, labour: renderLabour, paid: renderPaid}[session.activeTab];
   root.innerHTML = renderer ? renderer() : renderDashboard();
+  refreshTradeDatalist();
   attach();
   updateSyncPill();
   const fab = $('fab-add');
@@ -1044,11 +1057,14 @@ function formBody(kind, p) {
   }
   if (kind === 'budget') {
     p = p || {category: '', budgeted: '', budgetedMaterials: '', budgetedLabour: '', notes: ''};
-    const mat = (p.budgetedMaterials != null && p.budgetedMaterials !== '') ? p.budgetedMaterials : p.budgeted;
+    let matVal = '';
+    if (p.budgetedMaterials != null && p.budgetedMaterials !== '') matVal = p.budgetedMaterials;
+    else if (p.budgeted != null && p.budgeted !== '') matVal = p.budgeted;
+    const labVal = (p.budgetedLabour != null && p.budgetedLabour !== '') ? p.budgetedLabour : '';
     return '<div class="form-grid">' +
-      '<div class="field wide"><label class="req">Trade</label><input list="category-options" id="m-category" value="' + esc(p.category) + '" placeholder="Plumbing, Electrical…"></div>' +
-      '<div class="field"><label class="req">Materials (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-budgeted-mat" value="' + esc(mat) + '" placeholder="Pipes, fittings, shops"></div>' +
-      '<div class="field"><label>Labour (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-budgeted-lab" value="' + esc(p.budgetedLabour || '') + '" placeholder="Plumber, electrician…"></div>' +
+      '<div class="field wide"><label class="req">Trade</label><input list="category-options" id="m-category" value="' + esc(p.category) + '" placeholder="Type or pick — add new names anytime"></div>' +
+      '<div class="field"><label>Materials (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-budgeted-mat" value="' + esc(matVal) + '" placeholder="0 if labour only"></div>' +
+      '<div class="field"><label>Labour (Rs)</label><input type="number" inputmode="decimal" min="0" step="any" id="m-budgeted-lab" value="' + esc(labVal) + '" placeholder="0 if materials only"></div>' +
       '<div class="field wide"><label>Notes</label><input id="m-notes" value="' + esc(p.notes) + '" placeholder="e.g. Jerome"></div></div>';
   }
   if (kind === 'actions') {
@@ -1324,14 +1340,15 @@ async function saveModal() {
     obj = {type: val('m-type'), label: val('m-label').trim(), amount: +a, date: val('m-date') || todayStr(), notes: val('m-notes').trim()};
   } else if (k === 'budget') {
     const c = val('m-category').trim();
-    const mat = val('m-budgeted-mat');
-    const lab = val('m-budgeted-lab');
-    if (!c) return showErr('Enter a trade (Plumbing, Electrical…).');
-    if (!finiteNum(mat) || +mat < 0) return showErr('Enter a materials amount (0 is ok).');
-    if (lab !== '' && (!finiteNum(lab) || +lab < 0)) return showErr('Enter a valid labour amount, or leave it blank.');
-    const materials = +mat;
-    const labourAmt = lab === '' ? 0 : +lab;
+    const matRaw = val('m-budgeted-mat');
+    const labRaw = val('m-budgeted-lab');
+    if (!c) return showErr('Enter a trade name (Plumbing, Foundation, or your own).');
+    if (matRaw !== '' && (!finiteNum(matRaw) || +matRaw < 0)) return showErr('Materials must be 0 or more, or leave blank.');
+    if (labRaw !== '' && (!finiteNum(labRaw) || +labRaw < 0)) return showErr('Labour must be 0 or more, or leave blank.');
+    const materials = matRaw === '' ? 0 : +matRaw;
+    const labourAmt = labRaw === '' ? 0 : +labRaw;
     obj = {category: c, budgetedMaterials: materials, budgetedLabour: labourAmt, budgeted: materials + labourAmt, notes: val('m-notes').trim()};
+    registerTradeCategory(c);
   } else if (k === 'actions') {
     const t = val('m-title').trim();
     if (!t) return showErr('Enter a task name.');
@@ -1575,6 +1592,11 @@ export function renderSettings() {
     '<div class="set-note">Provider, key, chosen model, and the model list are saved to <b>your</b> Google Drive profile.</div></div>' +
     '<div class="set-section"><h3>AI Chat assistant</h3><p class="hint">Choose a model for the chat bot. Can be different from the receipt scanner (e.g. a cheaper/faster model).</p>' +
     '<div class="field" style="margin-bottom:10px"><label>Chat model</label><select id="set-chat-model"><option value="">Same as scan model</option></select></div></div>' +
+    '<div class="set-section"><h3>Trade categories</h3><p class="hint">Names for Budget, Purchases, and Labour. Built-in defaults plus any you add. Budget rows also appear here.</p>' +
+    '<div class="trade-cat-list" id="trade-cat-list"></div>' +
+    '<div class="set-row" style="margin-top:10px">' +
+    '<input id="set-trade-new" class="trade-cat-input" placeholder="New trade name" autocomplete="off">' +
+    '<button type="button" class="set-btn" id="set-trade-add">Add trade</button></div></div>' +
     '<div class="set-section"><h3>Manual backup (CSV)</h3><p class="hint">Export a local copy, or import to replace current data.</p>' +
     '<div class="set-row"><button class="set-btn" id="csv-export">Export CSV</button>' +
     '<button class="set-btn" id="csv-import">Import CSV</button>' +
@@ -1640,6 +1662,50 @@ export function renderSettings() {
     } catch (e) { toast(e.message || 'Could not create Drive folder'); }
   };
   const lo = $('google-logout'); if (lo) lo.onclick = googleLogout;
+  renderTradeCatList();
+  const tradeAdd = $('set-trade-add');
+  const tradeNew = $('set-trade-new');
+  if (tradeAdd && tradeNew) {
+    tradeAdd.onclick = async () => {
+      const c = tradeNew.value.trim();
+      if (!c) { toast('Enter a trade name'); return; }
+      registerTradeCategory(c);
+      tradeNew.value = '';
+      renderTradeCatList();
+      refreshTradeDatalist();
+      toast('Added “' + c + '”');
+    };
+    tradeNew.onkeydown = e => { if (e.key === 'Enter') tradeAdd.click(); };
+  }
+}
+
+function renderTradeCatList() {
+  const box = $('trade-cat-list');
+  if (!box) return;
+  const cats = allTradeCategories();
+  if (!cats.length) {
+    box.innerHTML = '<p class="field-hint">No trades yet.</p>';
+    return;
+  }
+  box.innerHTML = cats.map(c => {
+    const custom = (settings.tradeCategories || []).includes(c) && !CATEGORIES.includes(c);
+    const inBudget = (state.budget || []).some(b => b.category === c);
+    return '<div class="trade-cat-row"><span>' + esc(c) +
+      (custom ? ' <em class="tag">custom</em>' : '') +
+      (inBudget ? ' <em class="tag">budget</em>' : '') + '</span>' +
+      (custom ? '<button type="button" class="icon-btn danger icon-only" data-trade-del="' + esc(c) + '" title="Remove">×</button>' : '') +
+      '</div>';
+  }).join('');
+  box.querySelectorAll('[data-trade-del]').forEach(btn => {
+    btn.onclick = async () => {
+      const c = btn.dataset.tradeDel;
+      if (!c || !confirm('Remove custom trade “' + c + '” from the list? Budget rows are not deleted.')) return;
+      settings.tradeCategories = (settings.tradeCategories || []).filter(x => x !== c);
+      await saveSettings();
+      renderTradeCatList();
+      refreshTradeDatalist();
+    };
+  });
 }
 
 function syncChromeClasses() {

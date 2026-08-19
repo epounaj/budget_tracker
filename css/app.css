@@ -198,6 +198,9 @@ td.num.over{color:var(--spend);}
 .paid-kind-pills{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
 .paid-table{min-width:760px;}
 .labour-table{min-width:640px;}
+.trade-cat-list{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:4px;}
+.trade-cat-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:var(--surface-2);border-radius:8px;font-size:13px;}
+.trade-cat-input{flex:1;min-width:0;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--line-2);border-radius:9px;}
 .empty-state{text-align:center;padding:44px 16px;color:var(--ink-2);}
 .empty-state .big{font-size:14.5px;color:var(--ink);margin-bottom:5px;font-weight:500;}
 .empty-state .small{font-size:13px;}

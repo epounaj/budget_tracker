@@ -1,10 +1,10 @@
-import {settings, session} from './store.js?v=20260819c';
-import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame, isBankName} from './util.js?v=20260819c';
-import {CATEGORIES} from './config.js?v=20260819c';
-import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260819c';
-import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260819c';
+import {settings, session} from './store.js?v=20260819d';
+import {$, toast, normalizeCategory, parseMoney, parseDateISO, esc, lineAmount, sumLines, summarizePurchase, guessCategoryFromItem, itemsLookSame, isBankName, allTradeCategories} from './util.js?v=20260819d';
+import {CATEGORIES} from './config.js?v=20260819d';
+import {callVisionOCR, callJsonCompletion, persistAiToProfile, readModelValue} from './ai.js?v=20260819d';
+import {pendingPhotos, ocrSrc, handlePhoto, clearPendingPhoto} from './photos.js?v=20260819d';
 
-export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260819c';
+export {handlePhoto, clearPendingPhoto, removePendingPhoto} from './photos.js?v=20260819d';
 
 export function ocrStatus(msg, err) {
   const el = $('m-ocr-status');
@@ -47,13 +47,14 @@ function catSelectHtml(selected) {
   const sel = normalizeCategory(selected);
   return '<select class="ln-cat" aria-label="Category"><option value="">Category</option>' +
     CATEGORIES.map(c => '<option value="' + esc(c) + '"' + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
+    allTradeCategories().filter(c => !CATEGORIES.includes(c)).map(c => '<option value="' + esc(c) + '"' + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>').join('') +
     '</select>';
 }
 
 export function categoryPillsHtml(selected) {
   const set = new Set((selected || []).map(normalizeCategory).filter(Boolean));
   return '<div class="cat-pills" id="m-cat-pills">' +
-    CATEGORIES.map(c => '<button type="button" class="cat-pill' + (set.has(c) ? ' on' : '') + '" data-cat="' + esc(c) + '">' + esc(c) + '</button>').join('') +
+    allTradeCategories().map(c => '<button type="button" class="cat-pill' + (set.has(c) ? ' on' : '') + '" data-cat="' + esc(c) + '">' + esc(c) + '</button>').join('') +
     '</div>';
 }
 

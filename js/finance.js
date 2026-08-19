@@ -1,6 +1,6 @@
 /** Plan vs spend: each payment is materials or labour (user can override on Paid tab). */
-import {state} from './store.js?v=20260819c';
-import {normalizeCategory, lineAmount, sumLines, purchaseCategories, purchasePayee, isBankName} from './util.js?v=20260819c';
+import {state} from './store.js?v=20260819d';
+import {normalizeCategory, lineAmount, sumLines, purchaseCategories, purchasePayee, isBankName} from './util.js?v=20260819d';
 
 export const PAY_METHODS = [
   {id: 'cash', label: 'Cash'},
@@ -114,7 +114,7 @@ export function totalPlan() {
 export function extraNeeded() { return Math.max(0, totalPlan() - fundsIn()); }
 export function overdrawn() { return Math.max(0, totalSpent() - fundsIn()); }
 
-function purchaseMaterialsForCat(p, key) {
+function purchaseAmountForCat(p, key) {
   const lines = Array.isArray(p.lines) ? p.lines : [];
   const tagged = lines.filter(l => normalizeCategory(l.category));
   if (tagged.length) {
@@ -133,7 +133,7 @@ export function spentMaterialsForCat(c) {
   let total = 0;
   (state.purchases || []).forEach(p => {
     if (defaultSpendKind(p, 'purchases') !== 'materials') return;
-    total += purchaseMaterialsForCat(p, key);
+    total += purchaseAmountForCat(p, key);
   });
   (state.labour || []).forEach(p => {
     if (defaultSpendKind(p, 'labour') !== 'materials') return;
@@ -147,7 +147,7 @@ export function spentLabourForCat(c) {
   let total = 0;
   (state.purchases || []).forEach(p => {
     if (defaultSpendKind(p, 'purchases') !== 'labour') return;
-    total += purchaseMaterialsForCat(p, key) || purchaseTotal(p);
+    total += purchaseAmountForCat(p, key);
   });
   (state.labour || []).forEach(p => {
     if (defaultSpendKind(p, 'labour') !== 'labour') return;

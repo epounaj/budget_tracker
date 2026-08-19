@@ -1,11 +1,11 @@
-import {DB_NAME, DB_VERSION, STORES, TOKEN_KEY} from './config.js?v=20260819c';
+import {DB_NAME, DB_VERSION, STORES, TOKEN_KEY} from './config.js?v=20260819d';
 
 let db;
 export let state = {funds: [], budget: [], actions: [], sellers: [], purchases: [], labour: []};
 export let settings = {
   provider: 'openai', apiKey: '', model: '', apiBase: '', chatModel: '', models: [], profiles: {},
   driveClientId: '', driveToken: null, driveTokenExp: 0, driveFolderId: '', user: null, userSub: '', autoCsv: true,
-  csvSyncedAt: '', csvDirty: false
+  csvSyncedAt: '', csvDirty: false, tradeCategories: []
 };
 export let session = {
   activeTab: 'funds',
