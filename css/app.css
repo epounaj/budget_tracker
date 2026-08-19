@@ -167,8 +167,20 @@ h1{font-size:20px;font-weight:700;margin:0;letter-spacing:-.03em;}
 .kind-check.on.mat{border-color:#BCD8C8;background:var(--accent-soft);color:var(--accent-deep);}
 .kind-check.on.lab{border-color:#E8C4A8;background:#FFF4E8;color:#9A5B00;}
 .kind-cell{min-width:168px;}
-.paid-stats,.labour-stats{margin-bottom:14px;}
-.labour-summary{margin-bottom:6px;}
+.paid-stats,.labour-stats,.budget-stats{margin-bottom:14px;}
+.page-summary,.labour-summary,.budget-summary{margin-bottom:6px;}
+.budget-funds{margin-top:10px;}
+.budget-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:16px;}
+.budget-table{min-width:680px;}
+.budget-cell{min-width:120px;}
+.budget-cell .cell-bar{height:5px;background:var(--surface-2);border-radius:999px;overflow:hidden;margin-bottom:4px;}
+.budget-cell .cell-bar span{display:block;height:100%;background:var(--accent);border-radius:999px;}
+.budget-cell .cell-bar span.over{background:var(--spend);}
+.budget-cell .cell-amt{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-weight:600;font-size:13px;}
+.budget-cell .cell-amt.over{color:var(--spend);}
+.budget-cell .cell-plan{font-size:11px;color:var(--ink-2);margin-left:2px;}
+.budget-cell.over{background:rgba(255,240,240,.45);}
+td.num.over{color:var(--spend);}
 .chart-panel{padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);}
 .chart-row{display:grid;grid-template-columns:minmax(72px,28%) 1fr auto;gap:8px 10px;align-items:center;margin-bottom:10px;font-size:12.5px;}
 .chart-row:last-child{margin-bottom:0;}
@@ -517,7 +529,8 @@ body.overlay-open,body.lightbox-open,body.chat-open{overflow:hidden;}
   .dash-table th,.dash-table td{padding:6px 4px;}
   .chat-panel{width:100vw;width:100%;}
   .chat-send-btn{min-height:48px;}
-  .paid-kind-pills{flex-basis:100%;}
+  .budget-charts{grid-template-columns:1fr;}
+  .budget-table{min-width:560px;}
   .kind-cell{min-width:140px;}
   .chart-row{grid-template-columns:1fr;gap:4px;}
   .chart-val{text-align:left;}

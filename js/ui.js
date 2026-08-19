@@ -1,21 +1,21 @@
-import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819a';
-import {state, settings, session, persist, saveSettings} from './store.js?v=20260819a';
-import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260819a';
-import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819a';
+import {TITLES, CHIP, CATEGORIES} from './config.js?v=20260819b';
+import {state, settings, session, persist, saveSettings} from './store.js?v=20260819b';
+import {$, esc, money, moneyDec, fmtNum, todayStr, uid, finiteNum, toast, normalizeCategory, lineAmount, sumLines, purchaseCategories, summarizePurchase, guessCategoryFromItem} from './util.js?v=20260819b';
+import {buildCatalog, filterCatalog, catalogPage, CATALOG_PAGE_SIZE, parseShoppingList, matchShoppingList, groupQuoteBySeller, aiAssistMatches, applyAiMatches, catalogCategories, sellerPhotoList} from './catalog.js?v=20260819b';
 import {
   PAY_METHODS, payMethodLabel, purchaseTotal, labourTotal, loanReceived, ownCash, fundsIn,
   totalSpent, inHand, budgetMaterialsPlanned, budgetLabourPlanned, budgetPlan, totalPlan,
   extraNeeded, overdrawn, spentMaterialsForCat, spentLabourForCat, paidToRows,
   allPayments, labourPayments, labourBudgetPlanned, labourByTrade, labourByPayee, defaultSpendKind,
   materialsSpent, labourSpent
-} from './finance.js?v=20260819a';
-import {hub} from './hub.js?v=20260819a';
-import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819a';
-import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819a';
-import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819a';
-import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819a';
-import {downloadCSV, importCSVFile} from './csv.js?v=20260819a';
-import {googleLogout, startGoogleLogin} from './auth.js?v=20260819a';
+} from './finance.js?v=20260819b';
+import {hub} from './hub.js?v=20260819b';
+import {providerOptionsHtml, modelPickerHtml, wireModelPicker, readModelValue, chatCompletionsUrl} from './ai.js?v=20260819b';
+import {maybeScanAfterPhoto, startReceiptScan, purchaseLinesHtml, bindLineTable, readPurchaseForm, readLinesFromTable, readSellerQuoteGroups, sellerNameKey, categoryPillsHtml, prefillEmptyLineCategories, fillMissingWithAi} from './receipts.js?v=20260819b';
+import {bindPhotoPreview, bindLightboxShell, bindAlbumControls, photoFieldHtml, existingFormPhotos, pendingPhotos, persistablePhoto, clearPendingPhoto} from './photos.js?v=20260819b';
+import {driveApiEnableUrl, ensureDriveFolder, saveProfileToDrive, deleteDriveFile, uploadOriginalToDrive, uploadSellerOriginalToDrive, scheduleCsvSync, syncCsvToDrive, updateSyncPill, pullCsvFromDrive} from './drive.js?v=20260819b';
+import {downloadCSV, importCSVFile} from './csv.js?v=20260819b';
+import {googleLogout, startGoogleLogin} from './auth.js?v=20260819b';
 
 let sellerItemSearch = '';
 let sellerCatFilter = '';
@@ -102,16 +102,6 @@ function methodSelectHtml(id, selected) {
   return '<select id="' + id + '">' +
     PAY_METHODS.map(m => '<option value="' + m.id + '"' + (sel === m.id ? ' selected' : '') + '>' + m.label + '</option>').join('') +
     '</select>';
-}
-
-function envelopeHtml(label, planned, spent) {
-  const remain = planned - spent;
-  const w = planned > 0 ? Math.min(100, spent / planned * 100) : (spent > 0 ? 100 : 0);
-  const over = spent > planned;
-  return '<div class="envelope">' +
-    '<div class="envelope-row"><span>' + label + (over ? ' <span class="over-badge">OVER</span>' : '') + '</span><span>Spent <strong>' + money(spent) + '</strong> of ' + money(planned) +
-    ' · <strong style="color:' + (remain < 0 ? 'var(--spend)' : 'var(--accent)') + '">' + money(remain) + '</strong> left</span></div>' +
-    '<div class="bar"><span class="' + (over ? 'over' : '') + '" style="width:' + w + '%"></span></div></div>';
 }
 
 function financeStripHtml() {
@@ -248,22 +238,110 @@ function renderFunds() {
   return head('Funds', 'Log each loan tranche as it lands, plus any own cash. Spending is deducted automatically.', 'funds') +
     (state.funds.length ? '<div class="entry-list">' + items + '</div>' : empty('No funds recorded yet', 'Add your first loan phase or own-cash contribution.'));
 }
+function budgetSpendCell(spent, planned) {
+  const over = planned > 0 && spent > planned;
+  const noPlan = planned <= 0 && spent > 0;
+  let bar = '';
+  if (planned > 0 || spent > 0) {
+    const w = planned > 0 ? Math.min(100, spent / planned * 100) : 100;
+    bar = '<div class="cell-bar"><span class="' + (over || noPlan ? 'over' : '') + '" style="width:' + w + '%"></span></div>';
+  }
+  return bar + '<span class="cell-amt' + (over || noPlan ? ' over' : '') + '">' + money(spent) + '</span>' +
+    (planned > 0 ? '<span class="cell-plan">/ ' + money(planned) + '</span>' : (noPlan ? ' <span class="over-badge">NO PLAN</span>' : ''));
+}
+
 function renderBudget() {
-  const items = state.budget.map(b => {
+  if (!state.budget.length) {
+    return head('Budget by trade', 'Plan materials and labour per trade. Shop bills hit materials; contractor payments hit labour.', 'budget') +
+      empty('No budget trades yet', 'Add Plumbing, Electrical, Foundation… with materials and labour amounts.');
+  }
+
+  const plan = totalPlan();
+  const fin = fundsIn();
+  const spent = totalSpent();
+  const hand = inHand();
+  const extra = extraNeeded();
+  const over = overdrawn();
+  const matPlanned = state.budget.reduce((s, b) => s + budgetMaterialsPlanned(b), 0);
+  const labPlanned = labourBudgetPlanned();
+  const matSpent = materialsSpent();
+  const labSpent = labourSpent();
+  const remainPlan = plan - spent;
+  const pct = plan > 0 ? Math.round(spent / plan * 100) : 0;
+
+  const matByTrade = state.budget.map(b => ({
+    trade: b.category,
+    spent: spentMaterialsForCat(b.category),
+    planned: budgetMaterialsPlanned(b)
+  })).filter(r => r.planned > 0 || r.spent > 0)
+    .sort((a, b) => Math.max(b.spent, b.planned) - Math.max(a.spent, a.planned));
+
+  const labByTrade = state.budget.map(b => ({
+    trade: b.category,
+    spent: spentLabourForCat(b.category),
+    planned: budgetLabourPlanned(b)
+  })).filter(r => r.planned > 0 || r.spent > 0)
+    .sort((a, b) => Math.max(b.spent, b.planned) - Math.max(a.spent, a.planned));
+
+  let html = head('Budget by trade', 'Plan materials and labour per trade. Charts compare spent vs planned for each envelope.', 'budget');
+
+  html += '<div class="page-summary budget-summary">' +
+    '<div class="insights-grid budget-stats">' +
+    '<div class="insight-card"><p class="k">Plan</p><p class="v">' + money(plan) + '</p><p class="s">Mat ' + money(matPlanned) + ' · Lab ' + money(labPlanned) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Spent</p><p class="v bad">' + money(spent) + '</p><p class="s">Mat ' + money(matSpent) + ' · Lab ' + money(labSpent) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Plan remaining</p><p class="v ' + (remainPlan < 0 ? 'bad' : 'good') + '">' + money(remainPlan) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Plan used</p><p class="v ' + (pct > 100 ? 'bad' : '') + '">' + (plan ? pct + '%' : '—') + '</p></div>' +
+    '</div>';
+
+  if (plan > 0) {
+    html += '<div class="chart-gauge"><div class="chart-gauge-bar"><span style="width:' + Math.min(100, pct) + '%" class="' + (pct > 100 ? 'over' : '') + '"></span></div>' +
+      '<p class="chart-gauge-note">' + money(spent) + ' of ' + money(plan) + ' plan spent' +
+      (remainPlan < 0 ? ' · <strong style="color:var(--spend)">Over plan by ' + money(-remainPlan) + '</strong>' : '') + '</p></div>';
+  }
+
+  html += '<div class="insights-grid budget-funds">' +
+    '<div class="insight-card"><p class="k">Funds in</p><p class="v">' + money(fin) + '</p></div>' +
+    '<div class="insight-card"><p class="k">In hand</p><p class="v ' + (hand < 0 ? 'bad' : 'good') + '">' + money(hand) + '</p></div>' +
+    '<div class="insight-card"><p class="k">Extra needed</p><p class="v ' + (extra > 0 ? 'bad' : '') + '">' + money(extra) + '</p>' +
+    '<p class="s">Capital still required (plan − funds in)</p></div>' +
+    (over > 0 ? '<div class="insight-card"><p class="k">Overdrawn</p><p class="v bad">' + money(over) + '</p><p class="s">Spent more than funds in</p></div>' : '') +
+    '</div></div>';
+
+  if (matByTrade.length || labByTrade.length) {
+    html += '<div class="budget-charts">';
+    if (matByTrade.length) {
+      html += '<div class="dash-section chart-panel"><p class="dash-title">Materials by trade</p>' +
+        '<p class="panel-desc" style="margin:-6px 0 10px">Green = spent · faint = planned</p>' +
+        chartBarHtml(matByTrade, {showPlan: true}) + '</div>';
+    }
+    if (labByTrade.length) {
+      html += '<div class="dash-section chart-panel"><p class="dash-title">Labour by trade</p>' +
+        '<p class="panel-desc" style="margin:-6px 0 10px">Green = spent · faint = planned</p>' +
+        chartBarHtml(labByTrade, {showPlan: true}) + '</div>';
+    }
+    html += '</div>';
+  }
+
+  const tableRows = state.budget.map(b => {
     const matP = budgetMaterialsPlanned(b), labP = budgetLabourPlanned(b);
     const matS = spentMaterialsForCat(b.category), labS = spentLabourForCat(b.category);
-    const plan = budgetPlan(b), spent = matS + labS, remain = plan - spent;
-    return '<div class="entry"><div class="entry-top"><div><p class="entry-name">' + esc(b.category) + '</p>' +
-      (b.notes ? '<p class="entry-sub">' + esc(b.notes) + '</p>' : '') + '</div><span class="entry-amount">' + money(plan) + '</span></div>' +
-      envelopeHtml('Materials', matP, matS) +
-      envelopeHtml('Labour', labP, labS) +
-      '<div class="entry-meta" style="margin-top:10px"><span class="meta-item">Total spent <strong>' + money(spent) + '</strong></span>' +
-      '<span class="meta-item">Remaining <strong style="color:' + (remain < 0 ? 'var(--spend)' : 'var(--accent)') + '">' + money(remain) + '</strong></span></div>' +
-      '<div class="entry-actions">' + actBtns('budget', b.id) + '</div></div>';
+    const totalP = budgetPlan(b), rem = totalP - matS - labS;
+    const matOver = (matP > 0 && matS > matP) || (matP <= 0 && matS > 0);
+    const labOver = labP > 0 && labS > labP;
+    return '<tr>' +
+      '<td><strong>' + esc(b.category) + '</strong>' + (b.notes ? '<div class="entry-sub">' + esc(b.notes) + '</div>' : '') + '</td>' +
+      '<td class="budget-cell' + (matOver ? ' over' : '') + '">' + budgetSpendCell(matS, matP) + '</td>' +
+      '<td class="budget-cell' + (labOver ? ' over' : '') + '">' + budgetSpendCell(labS, labP) + '</td>' +
+      '<td class="num tight">' + money(totalP) + '</td>' +
+      '<td class="num tight' + (rem < 0 ? ' over' : '') + '">' + money(rem) + (rem < 0 ? ' <span class="over-badge">OVER</span>' : '') + '</td>' +
+      '<td><div class="row-actions">' + actBtns('budget', b.id) + '</div></td></tr>';
   }).join('');
-  return head('Budget by trade', 'Plan materials and labour for each part. Shop bills hit materials; contractor payments hit labour.', 'budget') +
-    financeStripHtml() +
-    (state.budget.length ? '<div class="entry-list">' + items + '</div>' : empty('No budget trades yet', 'Add Plumbing, Electrical, Foundation… with a materials amount and a labour amount.'));
+
+  html += '<div class="dash-section"><p class="dash-title">All trades</p>' +
+    '<div class="purchase-table-wrap"><table class="purchase-table budget-table"><thead><tr>' +
+    '<th>Trade</th><th>Materials</th><th>Labour</th><th class="num">Plan</th><th class="num">Remaining</th><th>Actions</th>' +
+    '</tr></thead><tbody>' + tableRows + '</tbody></table></div></div>';
+  return html;
 }
 
 function kindToggleHtml(source, id, kind) {
@@ -323,7 +401,7 @@ function renderLabour() {
 
   let html = head('Labour payments', 'Contractor pay and anything you marked as labour on Paid. Charts compare spend to your labour budget per trade.', 'labour');
 
-  html += '<div class="labour-summary">' +
+  html += '<div class="page-summary labour-summary">' +
     '<div class="insights-grid labour-stats">' +
     '<div class="insight-card"><p class="k">Labour spent</p><p class="v bad">' + money(spent) + '</p></div>' +
     '<div class="insight-card"><p class="k">Labour planned</p><p class="v">' + money(planned) + '</p></div>' +

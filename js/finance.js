@@ -1,6 +1,6 @@
 /** Plan vs spend: each payment is materials or labour (user can override on Paid tab). */
-import {state} from './store.js?v=20260819a';
-import {normalizeCategory, lineAmount, sumLines, purchaseCategories} from './util.js?v=20260819a';
+import {state} from './store.js?v=20260819b';
+import {normalizeCategory, lineAmount, sumLines, purchaseCategories} from './util.js?v=20260819b';
 
 export const PAY_METHODS = [
   {id: 'cash', label: 'Cash'},
